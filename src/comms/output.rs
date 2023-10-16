@@ -6,7 +6,7 @@ use tokio::net::UdpSocket;
 use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message}, comms::input};
 
 pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
-    let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
+    //let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
     let mut chosen_peer: Option<Peer> = None;
     if get_peers().await.capacity() == 0 {
         println!("No peers found");

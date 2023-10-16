@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use comms::{output::send, input::receive};
+use comms::{output::send, input::receive, start_server};
 use peer::{Peer, Address};
 use regex::Regex;
 use tokio::net::UdpSocket;
@@ -19,22 +19,17 @@ async fn main() -> std::io::Result<()> {
     peer::add_peer(Peer::new(Address::new("127.0.0.1".to_string(), 1234).unwrap())).await;
     peer::add_peer(Peer::new(Address::new("127.0.0.1".to_string(), 1235).unwrap())).await;
     let args = Args::parse();
-    let socket = UdpSocket::bind(format!("127.0.0.1:{}", args.port)).await?;
-    let socket = Arc::new(socket);
-
-    let sock = Arc::clone(&socket);
-    let _handle1 = tokio::spawn(send(sock));
-    let sock = Arc::clone(&socket);
-    let handle2 = tokio::spawn(receive(sock));
-    handle2.await?;
+    start_server(args).await?;
     Ok(())
 }
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+pub struct Args {
+    //Port for udp socket
     #[arg(short, long, default_value_t = 1234)]
     port: u16,
-    //#[arg(short, long)]
-    //first_peer_port: u16,
+    //Port for tcp socket
+    #[arg(short, long, default_value_t = 1235)]
+    port_meta: u32,
 }

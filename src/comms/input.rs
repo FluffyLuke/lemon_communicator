@@ -9,3 +9,4 @@ pub async fn receive(socket: Arc<UdpSocket>) -> std::io::Result<()>{
         println!("got something: {}", String::from_utf8_lossy(&buf));
     }
 }
+
