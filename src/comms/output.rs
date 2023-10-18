@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use regex::Regex;
 use tokio::net::UdpSocket;
 
-use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message}, comms::input};
+use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message}};
 
 pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
     //let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
@@ -26,6 +25,7 @@ pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
         }
         let input = input.unwrap();
         let capacity = peers.capacity();
+        //TODO NAPRAWIĆ TEGO IF'A
         if input <= 0 && input > capacity {
             continue;
         }
@@ -37,7 +37,10 @@ pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
         }
         let message = get_input_with_message("Provide message: ").unwrap();
         println!("sent string: {message}");
-        socket.send_to(message.as_bytes(),&chosen_peer.clone().unwrap().get_address()).await.unwrap();
+        let target_peer = chosen_peer.clone().unwrap();
+        let target_address = target_peer.get_address();
+        println!("Target: {}:{}", target_address.get_addr(), target_address.get_port());
+        socket.send_to(message.as_bytes(), format!("{}:{}", target_address.get_addr(), target_address.get_port())).await.unwrap();
     }
 
 }
