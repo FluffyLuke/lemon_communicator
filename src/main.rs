@@ -12,7 +12,7 @@ mod comms;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    //peer::add_peer(Peer::new(Address::new("127.0.0.1".to_string(), 1236, 1237).unwrap())).await;
+    peer::add_peer(Peer::new(Address::new("192.168.11.11".to_string(), 1236, 1237).unwrap())).await;
     
     let args = Args::parse();
     let addr = local_ip().unwrap().to_string();

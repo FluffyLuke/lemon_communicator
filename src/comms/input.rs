@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use tokio::net::UdpSocket;
 
+use crate::comms::peer_data::get_peer_addresses;
+
 pub async fn receive(socket: Arc<UdpSocket>) -> std::io::Result<()>{
     let mut buf: [u8; 255] = [0; 255];
     println!("Listening for connections");

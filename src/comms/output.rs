@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use tokio::net::UdpSocket;
+use tokio::net::{UdpSocket, TcpListener};
 
-use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message}};
+use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message, get_input_parsed}};
 
-pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
+pub async fn send(socket: Arc<UdpSocket>, data_socket: Arc<TcpListener>) -> std::io::Result<()>{
     //let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
-    let mut chosen_peer: Option<Peer> = None;
     if get_peers().await.capacity() == 0 {
         println!("No peers found");
         return Ok(());
@@ -24,23 +23,43 @@ pub async fn send(socket: Arc<UdpSocket>) -> std::io::Result<()>{
             continue;
         }
         let input = input.unwrap();
-        let capacity = peers.capacity();
-        //TODO NAPRAWIĆ TEGO IF'A
-        if input <= 0 && input > capacity {
+        let len = peers.len();
+        if input > len-1 {
+            println!("Provided wrong peer");
             continue;
         }
+        let mut chosen_peer: Option<Peer> = None;
         for (i, peer) in peers.iter().enumerate() {
             if i == input as usize {
                 chosen_peer = Some(peer.clone());
                 println!("Peer chosen: {}", &chosen_peer.clone().unwrap());
             }
         }
-        let message = get_input_with_message("Provide message: ").unwrap();
-        println!("sent string: {message}");
-        let target_peer = chosen_peer.clone().unwrap();
-        let target_address = target_peer.get_address();
-        println!("Target: {}:{}", target_address.get_addr(), target_address.get_port());
-        socket.send_to(message.as_bytes(), format!("{}:{}", target_address.get_addr(), target_address.get_port())).await.unwrap();
+        if let None = chosen_peer {
+            println!("Peer not found");
+            continue;
+        }
+        let chosen_peer = chosen_peer.unwrap();
+        
+        //Actions 
+        println!("SAY WHAT DO TO:");
+        println!("send message = {}", SEND_MESSAGE);
+        println!("get peers = NIMA");
+
+        let input = get_input_parsed::<u8>().unwrap();
+        match input {
+            
+        }
     }
 
+}
+
+const SEND_MESSAGE: u8 = 0;
+async fn send_message(chosen_peer: Peer, udp_socket: UdpSocket) {
+    let message = get_input_with_message("Provide message: ").unwrap();
+        println!("sent string: {message}");
+        let target_peer = chosen_peer.clone();
+        let target_address = target_peer.get_address();
+        println!("Target: {}:{}", target_address.get_addr(), target_address.get_port());
+        udp_socket.send_to(message.as_bytes(), format!("{}:{}", target_address.get_addr(), target_address.get_port())).await.unwrap();
 }
