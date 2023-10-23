@@ -4,8 +4,8 @@ use std::{str, string, sync::Arc};
 
 use crate::peer::get_peers;
 
-const KNOWN_ADDRESSES_REQUEST: u8 = 1;
-const PEER_INFO_REQUEST: u8 = 1;
+pub const KNOWN_ADDRESSES_REQUEST: u8 = 1;
+pub const PEER_INFO_REQUEST: u8 = 1;
 
 pub async fn send_peer_data(socket: Arc<TcpListener>) -> std::io::Result<()> {
     let mut buf  = [0; 1];

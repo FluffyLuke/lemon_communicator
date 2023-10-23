@@ -1,12 +1,10 @@
-use std::{error::Error, fmt::{self, format}, collections::HashSet, sync::Arc, thread::{ThreadId, Thread}};
+use std::{error::Error, fmt, collections::HashSet, sync::Arc};
 
-use local_ip_address::local_ip;
 use regex::Regex;
 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use std::ops::DerefMut;
 
 lazy_static! {
     static ref KNOWN_ADDRESSES: Arc<Mutex<HashSet<Peer>>> = Arc::new(Mutex::new(HashSet::new()));
