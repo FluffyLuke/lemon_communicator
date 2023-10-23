@@ -17,7 +17,7 @@ pub async fn send(socket: Arc<UdpSocket>, data_socket: Arc<TcpListener>) -> std:
         for (i, peer) in peers.iter().enumerate() {
             println!("{}:{}", i, peer);
         }
-        let input = get_input()?.parse::<usize>();
+        let input = get_input().unwrap().parse::<usize>();
         if let Err(_) = input {
             println!("Provided wrong peer");
             continue;
@@ -46,16 +46,22 @@ pub async fn send(socket: Arc<UdpSocket>, data_socket: Arc<TcpListener>) -> std:
         println!("send message = {}", SEND_MESSAGE);
         println!("get peers = NIMA");
 
-        let input = get_input_parsed::<u8>().unwrap();
+        let input = get_input_parsed::<u8>();
+        if let Err(_) = input {
+            println!("Wrong option");
+            continue;
+        }
+        let input = input.unwrap();
         match input {
-            
+            0 => { send_message(chosen_peer, &*socket).await },
+            _ => println!("Wrong option!")
         }
     }
 
 }
 
 const SEND_MESSAGE: u8 = 0;
-async fn send_message(chosen_peer: Peer, udp_socket: UdpSocket) {
+async fn send_message(chosen_peer: Peer, udp_socket: &UdpSocket) {
     let message = get_input_with_message("Provide message: ").unwrap();
         println!("sent string: {message}");
         let target_peer = chosen_peer.clone();

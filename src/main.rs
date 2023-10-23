@@ -1,7 +1,7 @@
 
 use clap::Parser;
 use comms::start_server;
-use local_ip_address::linux::local_ip;
+use local_ip_address::local_ip;
 use peer::{Peer, Address};
 
 mod myio;
@@ -13,6 +13,7 @@ mod comms;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     peer::add_peer(Peer::new(Address::new("192.168.11.11".to_string(), 1236, 1237).unwrap())).await;
+    
     
     let args = Args::parse();
     let addr = local_ip().unwrap().to_string();
