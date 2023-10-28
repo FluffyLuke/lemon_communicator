@@ -1,35 +1,39 @@
 use serde_json::to_string;
-use tokio::{net::TcpListener, io::{AsyncReadExt, AsyncWriteExt}};
-use std::{str, string, sync::Arc};
+use tokio::{net::TcpListener, io::{AsyncReadExt, AsyncWriteExt, BufWriter, BufReader}};
+use tokio::time::sleep;
+use std::{str, string, sync::Arc, time::Duration};
 
 use crate::peer::get_peers;
 
 pub const KNOWN_ADDRESSES_REQUEST: u8 = 1;
 //pub const PEER_INFO_REQUEST: u8 = 1;
-pub const PEER_DATA_SIZE: usize = 1024;
 pub async fn send_peer_data(socket: Arc<TcpListener>) -> std::io::Result<()> {
-    let mut buf  = [0; 1];
+    let mut request_buf  = [0; 1];
     loop {
         let (mut stream, addr) = socket.accept().await?;
         println!("Got connection from {} asking for peer addresses", addr.to_string());
-        stream.read(&mut buf).await?;
+        let mut reader = BufReader::new(&mut stream);
+        reader.read(&mut request_buf).await?;
         
         //KNOWN_ADDRESSES hashtable request
-        if u8::from(buf[0]) == KNOWN_ADDRESSES_REQUEST {
+        if u8::from(request_buf[0]) == KNOWN_ADDRESSES_REQUEST {
             let peers = get_peers().await;
-            let peers_string = to_string(&peers).unwrap();
-            let mut buf: [u8; PEER_DATA_SIZE] = [0; PEER_DATA_SIZE];
             let mut response: [u8; 1] = [0; 1];
-            for (e, i) in peers_string.chars().enumerate() {
-                buf[e] = i as u8;
-                if buf[PEER_DATA_SIZE-1] != 0 {
-                    stream.write_all(&buf).await?;
-                    stream.read(&mut response).await?;
-                    buf = [0; PEER_DATA_SIZE];
+            for peer in peers {
+                //println!("Writing");
+                let peer = format!("{}{}", serde_json::to_string(&peer).unwrap(), '\n');
+                reader.write(peer.as_bytes()).await?;
+                //Await for response from the other end 
+                tokio::select! {
+                    _ = sleep(Duration::from_secs(1)) => {
+                        println!("Connection closed");
+                        break;
+                    }
+                    _ = reader.read(&mut response) => {
+                        //Continue
+                        //println!("Reading");
+                    }
                 }
-            }
-            if !buf.is_empty() {
-                stream.write_all(&buf).await?;
             }
             stream.shutdown().await?;
         }

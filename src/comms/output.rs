@@ -1,10 +1,10 @@
-use std::{sync::Arc, fmt, io::{Write, Read}};
+use std::{sync::Arc, fmt, io::{Write, Read}, collections::HashSet};
 
 use tokio::{net::{UdpSocket, TcpListener, TcpStream}, stream, io::{AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt}};
 
-use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message, get_input_parsed, InputError}};
+use crate::{peer::{get_peers, Peer, add_peer}, myio::{get_input, get_input_with_message, get_input_parsed, InputError}};
 
-use super::peer_data::{PEER_DATA_SIZE, KNOWN_ADDRESSES_REQUEST};
+use super::peer_data::KNOWN_ADDRESSES_REQUEST;
 
 pub async fn send(udp_socket: Arc<UdpSocket>, tcp_listener: Arc<TcpListener>) -> std::io::Result<()>{
     //let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
@@ -144,29 +144,32 @@ impl fmt::Display for SendMessageError {
 const GET_PEER_HASHTABLE: u8 = 1;
 async fn get_peer_hashtable(chosen_peer: Peer) -> Result<(), GetPeerHashtableError>{
     println!("Getting hashtable");
-    let mut hashtable = String::new();
     let mut buffer = String::new();
     let stream = TcpStream::connect(chosen_peer.get_addr_and_data_port())
         .await
         .map_err(|e| GetPeerHashtableError::IOError(e))?;
     let mut stream = BufReader::new(stream);
     let message = &[KNOWN_ADDRESSES_REQUEST];
+    //Request hashtable
     //TODO remove this unwrap
     stream.write_all(message).await.unwrap();
-
+    
     loop {
         //TODO remove this unwrap
         let recv = stream.read_line(&mut buffer).await.unwrap();
         if recv == 0 {
             break;
         }
-        hashtable.push_str(&buffer);
         //Send ok
         stream.write_all(b"1").await.unwrap();
+        let peer_serialized: Peer = serde_json::from_str(&buffer.trim()).unwrap();
+        add_peer(peer_serialized).await;
         //Clear buffer
         buffer.clear();
     }
-    println!("Got hashtable: {}", hashtable);
+    println!("Got hashtable");
+    println!("Adding peers to contacts");
+    if let Err(_) = stream.shutdown().await {}
     Ok(())
 }
 

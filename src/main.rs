@@ -13,8 +13,9 @@ mod comms;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     peer::add_peer(Peer::new(Address::new("192.168.11.13".to_string(), 1236, 1237).unwrap())).await;
-    
-    
+    //peer::add_peer(Peer::new(Address::new("192.168.11.15".to_string(), 1236, 1237).unwrap())).await;
+    //peer::add_peer(Peer::new(Address::new("192.168.11.17".to_string(), 1236, 1237).unwrap())).await;
+    //peer::add_peer(Peer::new(Address::new("192.168.11.19".to_string(), 1236, 1237).unwrap())).await;
     let args = Args::parse();
     let addr = local_ip().unwrap().to_string();
     println!("Your ip address is -> {}", addr);
