@@ -9,10 +9,10 @@ use crate::peer::Peer;
 use self::{output::send, input::receive, peer_data::send_peer_data};
 
 pub async fn start_server(this_peer: Peer) -> std::io::Result<()>{
-    let addr = format!("{}:{}", this_peer.get_address().get_addr(), this_peer.get_address().get_data_port()).parse().unwrap();
+    let addr = this_peer.get_addr_and_data_port().parse().unwrap();
     let socket_tcp = TcpSocket::new_v4()?;
     socket_tcp.bind(addr)?;
-    let socket_udp = UdpSocket::bind(format!("{}:{}", this_peer.get_address().get_addr(), this_peer.get_address().get_port())).await?;
+    let socket_udp = UdpSocket::bind(this_peer.get_addr_and_port()).await?;
     let socket_udp = Arc::new(socket_udp);
 
     let tcp_listener = Arc::new(socket_tcp.listen(128)?);

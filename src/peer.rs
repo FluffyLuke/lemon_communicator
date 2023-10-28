@@ -23,7 +23,7 @@ pub async fn add_peer(peer: Peer) -> bool {
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
-    address: Address
+    pub address: Address
 }
 
 impl Peer {
@@ -33,8 +33,12 @@ impl Peer {
         }
     }
 
-    pub fn get_address(&self) -> &Address {
-        &self.address
+    pub fn get_addr_and_port(&self) -> String {
+        format!("{}:{}", self.address.addr, self.address.port)
+    }
+
+    pub fn get_addr_and_data_port(&self) -> String {
+        format!("{}:{}", self.address.addr, self.address.data_port)
     }
 }
 

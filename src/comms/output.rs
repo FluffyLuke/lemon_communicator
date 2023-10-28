@@ -1,10 +1,10 @@
-use std::{sync::Arc, fmt, net::TcpStream, io::Write, ptr::metadata};
+use std::{sync::Arc, fmt, io::{Write, Read}};
 
-use tokio::{net::{UdpSocket, TcpListener}, stream};
+use tokio::{net::{UdpSocket, TcpListener, TcpStream}, stream, io::{AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt}};
 
 use crate::{peer::{get_peers, Peer}, myio::{get_input, get_input_with_message, get_input_parsed, InputError}};
 
-use super::peer_data::PEER_INFO_REQUEST;
+use super::peer_data::{PEER_DATA_SIZE, KNOWN_ADDRESSES_REQUEST};
 
 pub async fn send(udp_socket: Arc<UdpSocket>, tcp_listener: Arc<TcpListener>) -> std::io::Result<()>{
     //let ip_regex: regex::Regex = Regex::new(r"[0-9]+(?:\.[0-9]+){3}:[0-9]+").unwrap();
@@ -27,7 +27,7 @@ pub async fn send(udp_socket: Arc<UdpSocket>, tcp_listener: Arc<TcpListener>) ->
         //Actions 
         println!("SAY WHAT DO TO:");
         println!("send message = {}", SEND_MESSAGE);
-        println!("send message = {}", GET_PEER_HASHTABLE);
+        println!("Get hashtable = {}", GET_PEER_HASHTABLE);
         println!("get peers = NIMA");
 
         let input = get_input_parsed::<u8>();
@@ -43,6 +43,12 @@ pub async fn send(udp_socket: Arc<UdpSocket>, tcp_listener: Arc<TcpListener>) ->
                     println!("{e}");
                 }
             },
+            1 => {
+                let result = get_peer_hashtable(chosen_peer).await;
+                if let Err(e) = result {
+                    println!("{e}")
+                }
+            }
             _ => println!("Wrong option!")
         }
     }
@@ -110,10 +116,8 @@ async fn send_message(chosen_peer: Peer, udp_socket: &UdpSocket) -> Result<(), S
     let message = get_input_with_message("Provide message: ")
     .map_err(|e| SendMessageError::InputError(e))?;
     println!("sent string: {message}");
-    let target_peer = chosen_peer.clone();
-    let target_address = target_peer.get_address();
-    println!("Target: {}:{}", target_address.get_addr(), target_address.get_port());
-    udp_socket.send_to(message.as_bytes(), format!("{}:{}", target_address.get_addr(), target_address.get_port()))
+    println!("Target: {}", chosen_peer.get_addr_and_port());
+    udp_socket.send_to(message.as_bytes(), chosen_peer.get_addr_and_port())
     .await
     .map_err(|e| SendMessageError::SendError(e))?;
     Ok(())
@@ -139,16 +143,36 @@ impl fmt::Display for SendMessageError {
 
 const GET_PEER_HASHTABLE: u8 = 1;
 async fn get_peer_hashtable(chosen_peer: Peer) -> Result<(), GetPeerHashtableError>{
-    let mut stream = TcpStream::connect(chosen_peer.get_address().get_addr())
-    .map_err(|e| GetPeerHashtableError::IOError(e))?;
-    let message = &[PEER_INFO_REQUEST];
-    stream.write_all(message);
-    stream.read_exact(buf)
+    println!("Getting hashtable");
+    let mut hashtable = String::new();
+    let mut buffer = String::new();
+    let stream = TcpStream::connect(chosen_peer.get_addr_and_data_port())
+        .await
+        .map_err(|e| GetPeerHashtableError::IOError(e))?;
+    let mut stream = BufReader::new(stream);
+    let message = &[KNOWN_ADDRESSES_REQUEST];
+    //TODO remove this unwrap
+    stream.write_all(message).await.unwrap();
+
+    loop {
+        //TODO remove this unwrap
+        let recv = stream.read_line(&mut buffer).await.unwrap();
+        if recv == 0 {
+            break;
+        }
+        hashtable.push_str(&buffer);
+        //Send ok
+        stream.write_all(b"1").await.unwrap();
+        //Clear buffer
+        buffer.clear();
+    }
+    println!("Got hashtable: {}", hashtable);
     Ok(())
 }
 
 enum GetPeerHashtableError {
-    IOError(std::io::Error)
+    IOError(std::io::Error),
+    WrongUTF8CharacterError,
 }
 
 impl fmt::Display for GetPeerHashtableError {
@@ -156,6 +180,9 @@ impl fmt::Display for GetPeerHashtableError {
         match self {
             Self::IOError(e) => {
                 write!(f, "{e}")
+            }
+            Self::WrongUTF8CharacterError=> {
+                write!(f, "Wrong utf8 character was passed thru tcp channel")
             }
         }
     }

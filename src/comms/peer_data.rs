@@ -5,19 +5,33 @@ use std::{str, string, sync::Arc};
 use crate::peer::get_peers;
 
 pub const KNOWN_ADDRESSES_REQUEST: u8 = 1;
-pub const PEER_INFO_REQUEST: u8 = 1;
-
+//pub const PEER_INFO_REQUEST: u8 = 1;
+pub const PEER_DATA_SIZE: usize = 1024;
 pub async fn send_peer_data(socket: Arc<TcpListener>) -> std::io::Result<()> {
     let mut buf  = [0; 1];
     loop {
-        let (mut stream, _addr) = socket.accept().await?;
+        let (mut stream, addr) = socket.accept().await?;
+        println!("Got connection from {} asking for peer addresses", addr.to_string());
         stream.read(&mut buf).await?;
         
         //KNOWN_ADDRESSES hashtable request
         if u8::from(buf[0]) == KNOWN_ADDRESSES_REQUEST {
             let peers = get_peers().await;
             let peers_string = to_string(&peers).unwrap();
-            stream.write_all(peers_string.as_bytes()).await?;
+            let mut buf: [u8; PEER_DATA_SIZE] = [0; PEER_DATA_SIZE];
+            let mut response: [u8; 1] = [0; 1];
+            for (e, i) in peers_string.chars().enumerate() {
+                buf[e] = i as u8;
+                if buf[PEER_DATA_SIZE-1] != 0 {
+                    stream.write_all(&buf).await?;
+                    stream.read(&mut response).await?;
+                    buf = [0; PEER_DATA_SIZE];
+                }
+            }
+            if !buf.is_empty() {
+                stream.write_all(&buf).await?;
+            }
+            stream.shutdown().await?;
         }
         //Info about peer request
         // if char::from(buf[0]) == PEER_INFO_REQUEST {
