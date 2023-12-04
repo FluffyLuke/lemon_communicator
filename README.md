@@ -1,1 +1,1 @@
-# Genialny komunikator123
+# Genialny komunikator
