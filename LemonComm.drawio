@@ -1,6 +1,6 @@
-<mxfile modified="2023-12-06T14:28:00.267Z" host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0" etag="QrpUcp3W1uAXN6qmEGsq" version="22.1.5" type="github">
+<mxfile modified="2023-12-06T14:30:56.580Z" host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0" etag="sH24HFeUozlTU4FmlBIB" version="22.1.5" type="github">
   <diagram id="l8hXMBHkgcEJcSW0mbfh" name="Page-1">
-    <mxGraphModel dx="1434" dy="795" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+    <mxGraphModel dx="1434" dy="742" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -162,7 +162,7 @@
         <mxCell id="P2x3CETgAQtdfEMp_2Vj-8" value="&lt;h1&gt;Client&lt;/h1&gt;&lt;p&gt;is a single peer that becomes visible to all other peers once it connects to the Hub. It happens via on-premises app. After connecting, client will be able to communicate with other peers in the network.&lt;br&gt;&lt;/p&gt;&lt;p&gt;Client is anonymous and does not require authentication.&lt;/p&gt;" style="text;html=1;strokeColor=none;fillColor=none;spacing=5;spacingTop=-20;whiteSpace=wrap;overflow=hidden;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="610" y="20" width="285" height="180" as="geometry" />
         </mxCell>
-        <mxCell id="P2x3CETgAQtdfEMp_2Vj-9" value="&lt;h1&gt;Communication&lt;/h1&gt;&lt;p&gt;between peers takes place directly between them. Connection is encrypted and allows for message and file transfer.&lt;/p&gt;" style="text;html=1;strokeColor=none;fillColor=none;spacing=5;spacingTop=-20;whiteSpace=wrap;overflow=hidden;rounded=0;" parent="1" vertex="1">
+        <mxCell id="P2x3CETgAQtdfEMp_2Vj-9" value="&lt;h1&gt;Communication&lt;/h1&gt;&lt;p&gt;between peers takes place directly between them. Connection is encrypted and allows for message and file transfer. Received files and messages will be stored at client&#39;s device.&lt;/p&gt;" style="text;html=1;strokeColor=none;fillColor=none;spacing=5;spacingTop=-20;whiteSpace=wrap;overflow=hidden;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="884" y="20" width="285" height="180" as="geometry" />
         </mxCell>
         <mxCell id="P2x3CETgAQtdfEMp_2Vj-10" value="" style="html=1;verticalLabelPosition=bottom;align=center;labelBackgroundColor=#ffffff;verticalAlign=top;strokeWidth=2;strokeColor=#0080F0;shadow=0;dashed=0;shape=mxgraph.ios7.icons.mail;" parent="1" vertex="1">
