@@ -1,4 +1,4 @@
-use clap::{arg, command, Arg, ArgMatches};
+use clap::{command, Arg, ArgMatches};
 
 pub fn set_commands() -> ArgMatches {
 
