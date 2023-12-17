@@ -1,1 +1,0 @@
-# Genialny komunikator
