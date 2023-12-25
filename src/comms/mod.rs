@@ -1,3 +1,5 @@
+use serde::de::value;
+use serde_json::Value;
 use tokio::{net::{TcpListener, TcpStream, tcp::{WriteHalf, ReadHalf}}, io::{AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt}, time};
 use lazy_static::lazy_static;
 use tokio::time::sleep;
@@ -5,23 +7,11 @@ use tokio::sync::{Mutex, mpsc};
 use std::{str::from_utf8, sync::Arc};
 
 mod client;
+mod responses;
 
-use crate::{command_args::ParsedCommands, comms::client::Client};
+use crate::{command_args::ParsedCommands, comms::{client::Client, responses::{ RequestType, get_request_type_str}}};
 
-const CLIENT_INFO_SIZE: usize = 255;
-
-// Client requests
-const JOIN_NETWORK: u8 = 0x1;
-const STILL_ALIVE: u8 = 0x2;
-
-// Server requests
-const ACCEPT_CLIENT: u8 = 0x10;
-const VIBE_CHECK: u8 = 0x11;
-const UPDATE_CLIENT: u8 = 0x12;
-
-// Error messages
-const UNKNOWN_REQUEST: u8 = 0xF1;
-const WRONG_CLIENT_INFO: u8 = 0xF2;
+use self::responses::{result_response, Status, generic_response};
 
 lazy_static! {
     static ref KNOWN_CLIENTS: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
@@ -40,13 +30,14 @@ pub async fn start_server(commands: ParsedCommands) -> std::io::Result<()> {
     for handle in handles {
         handle.await.unwrap();
     }
+
     Ok(())
 }
 
 async fn serve_client(listener: TcpListener) {
-    //let mut buf = String::new();
+    let mut buf = String::new();
     loop {
-        //buf.clear();
+        buf.clear();
         let (mut stream, addr) = match listener.accept().await {
             Ok(result) => result,
             Err(e) => {
@@ -55,34 +46,25 @@ async fn serve_client(listener: TcpListener) {
             },
         };
         
-        
         println!("Serving new client: {}", addr);
         let (reader, mut writer) = stream.split();
         let mut reader = BufReader::new(reader);
-        let request = match reader.read_u8().await {
+
+        let _bytes_read = match reader.read_line(&mut buf).await {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Error while serving client: {:?}", e);
                 continue;
             }
         };
-        reader.consume(4);
-        // let request: u8 = match buf.parse::<u8>() {
-        //     Ok(request) => request,
-        //     Err(e) => {
-        //         eprintln!("Wrong client request: {e}");
-        //         continue;
-        //     }
-        // };
-        
-        let result = match request {
-            JOIN_NETWORK => join_network(&mut reader, &mut writer, addr).await,
-            48 => join_network(&mut reader, &mut writer, addr).await,
-            _ => {
-                println!("Wrong request {}", request);
-                let _result = writer.write(&[UNKNOWN_REQUEST]).await;
+        let result = match get_request_type_str(&buf) {
+            Ok((RequestType::join_network, value)) => join_network(&mut writer, addr, value).await,
+            Err(e) => {
+                println!("Wrong request: {}", e);
+                //let _result = writer.write(&[UNKNOWN_REQUEST]).await;
                 continue;
             }
+            _ => todo!(),
         };
     
         if let Err(e) = result {
@@ -91,32 +73,35 @@ async fn serve_client(listener: TcpListener) {
     }
 }
 
-async fn join_network(reader: &mut BufReader<ReadHalf<'_>>, writer: &mut WriteHalf<'_>, addr: std::net::SocketAddr) -> std::io::Result<()> {
-    writer.write_all(&[ACCEPT_CLIENT]).await?;
-    let mut buf = [0; CLIENT_INFO_SIZE];
-    let bytes_read = reader.read(&mut buf).await?;
+async fn join_network(
+    //reader: &mut BufReader<ReadHalf<'_>>, 
+    writer: &mut WriteHalf<'_>, 
+    addr: std::net::SocketAddr, 
+    request: Value) 
+    -> std::io::Result<()> {
+    let client_name = request.get("client")
+        .and_then(|value| value.get("name"))
+        .and_then(|value| value.as_str());
 
-    if bytes_read == 0 {
-        return Err(std::io::ErrorKind::ConnectionAborted.into());
+    if let None = client_name {
+        let error = "Client's name not found";
+        let response = result_response(Status::error, Some(error));
+        writer.write_all(response.as_bytes()).await?;
+        return Ok(())
     }
 
-    let name = match from_utf8(&buf) {
-        Ok(name) => name.to_string(),
-        Err(_) => {
-            writer.write_all(&[WRONG_CLIENT_INFO]).await?;
-            return Ok(());
-        }
-    };
+    let new_client = Client::new(addr, client_name.unwrap().to_string());
 
-    println!("New client was registered: {:?}", buf);
-
-    let new_client = Client::new(addr, name);
+    println!("New client registered! {:?}", new_client);
     KNOWN_CLIENTS.lock().await.push(new_client);
+    let response = result_response(Status::ok, None);
+    writer.write_all(response.as_bytes()).await?;
+
     Ok(())
 }
 
 async fn update_clients() {
-    let time_to_wait = time::Duration::from_secs(10);
+    let time_to_wait = time::Duration::from_secs(1200);
     loop {
         sleep(time_to_wait).await; // Wait between checks
         println!("Updating clients!");
@@ -139,7 +124,7 @@ async fn update_clients() {
 
 // Function checking for dead clients
 async fn check_if_dead() {
-    let time_to_wait = time::Duration::from_secs(10); // Time to wait between each check
+    let time_to_wait = time::Duration::from_secs(1200); // Time to wait between each check
     loop {
         sleep(time_to_wait).await; // Wait between checks
         println!("Runs vibe check!");
@@ -216,20 +201,30 @@ async fn check_if_dead() {
 
 // Checks if client is dead
 async fn vibe_check(client: &client::Client) -> bool {
+    let mut buf = String::new();
     let stream = TcpStream::connect(client.addr).await;
     if let Err(_) = stream {
         return false;
     }
     let mut stream = stream.unwrap();
-    let result = stream.write_all(&[VIBE_CHECK]).await;
+    let (reader, mut writer) = stream.split();
+    let mut reader = BufReader::new(reader);
+
+    let response = generic_response(RequestType::vibe_check, Status::ok, None);
+
+    let result = writer.write_all(response.as_bytes()).await;
     if let Err(_) = result {
         return false;
     }
-    let client_message = stream.read_u8().await;
-    if let Err(_) = client_message {
+    let result = reader.read_line(&mut buf).await;
+    if let Err(_) = result {
         return false;
     }
-    if client_message.unwrap() != STILL_ALIVE {
+    let request_type = match get_request_type_str(&buf) {
+        Ok((req_type, _)) => req_type,
+        Err(_) => return false,
+    };
+    if let RequestType::still_alive = request_type {
         return false;
     }
     true

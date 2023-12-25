@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::vec::Vec;
 
 use serde::Serialize;
+use serde::ser::SerializeSeq;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Client {
@@ -20,3 +22,19 @@ impl Client {
         }
     }
 }
+
+// pub struct ClientVec(Vec<Client>);
+
+// impl Serialize for ClientVec {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//         where
+//             S: serde::Serializer {
+//         let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+//         for c in self.0 {
+//             seq.serialize_element(&c.id)?;
+//             seq.serialize_element(&c.addr)?;
+//             seq.serialize_element(&c.name)?;
+//         }
+//         seq.end()
+//     }
+// }
