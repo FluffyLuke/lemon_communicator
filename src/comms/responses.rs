@@ -200,48 +200,50 @@ pub struct NetworkChange {
     pub client: Option<Client>
 }
 
-pub fn network_change(change_type: NetworkChangeType, client: Option<&Client>) -> Result<NetworkChange, NetworkChangeMessageError> {
-    let change = match change_type {
-        NetworkChangeType::ClientChange => {
-            let client = match client{
-                Some(client) => client,
-                None => return Err(NetChangeMesErr::ClientNotProvided),
-            };
-            json!({
-                "type": NetworkChangeType::ClientChange,
-                "id": client.id,
-                "client_addr": client.addr,
-                "client_name": client.name,
-            })
-        },
-        NetworkChangeType::ExitNetwork => {
-            let client = match client{
-                Some(client) => client,
-                None => return Err(NetChangeMesErr::ClientNotProvided),            
-            };
-            json!({
-                "type": NetworkChangeType::ExitNetwork,
-                "id": client.id,
-            })
-        },
-        NetworkChangeType::JoinNetwork => {
-            let client = match client{
-                Some(client) => client,
-                None => return Err(NetChangeMesErr::ClientNotProvided),
-            };
-            json!({
-                "type": NetworkChangeType::JoinNetwork,
-                "id": client.id,
-            })
-        },
-        NetworkChangeType::ServerShutdown => {
-            json!({
-                "type": NetworkChangeType::ServerShutdown,
-            })
-        },
-    };
-    let change = serde_json::from_str(change.as_str().unwrap()).unwrap();
-    Ok(change)
+impl NetworkChange {
+    pub fn new(change_type: NetworkChangeType, client: Option<&Client>) -> Result<NetworkChange, NetworkChangeMessageError> {
+        let change = match change_type {
+            NetworkChangeType::ClientChange => {
+                let client = match client{
+                    Some(client) => client,
+                    None => return Err(NetChangeMesErr::ClientNotProvided),
+                };
+                json!({
+                    "type": NetworkChangeType::ClientChange,
+                    "id": client.id,
+                    "client_addr": client.addr,
+                    "client_name": client.name,
+                })
+            },
+            NetworkChangeType::ExitNetwork => {
+                let client = match client{
+                    Some(client) => client,
+                    None => return Err(NetChangeMesErr::ClientNotProvided),            
+                };
+                json!({
+                    "type": NetworkChangeType::ExitNetwork,
+                    "id": client.id,
+                })
+            },
+            NetworkChangeType::JoinNetwork => {
+                let client = match client{
+                    Some(client) => client,
+                    None => return Err(NetChangeMesErr::ClientNotProvided),
+                };
+                json!({
+                    "type": NetworkChangeType::JoinNetwork,
+                    "id": client.id,
+                })
+            },
+            NetworkChangeType::ServerShutdown => {
+                json!({
+                    "type": NetworkChangeType::ServerShutdown,
+                })
+            },
+        };
+        let change = serde_json::from_str(change.as_str().unwrap()).unwrap();
+        Ok(change)
+    }
 }
 
 

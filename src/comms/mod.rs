@@ -9,13 +9,13 @@ use std::sync::Arc;
 mod client;
 mod responses;
 
-use crate::{command_args::ParsedArgs, comms::{client::Client, responses::{ RequestType, network_change, NetworkChange, NetworkChangeType, get_request_type_str}}};
+use crate::{command_args::ParsedArgs, comms::{client::Client, responses::{ RequestType, NetworkChange, get_request_type_str, NetworkChangeType}}};
 
 use self::responses::{result_response, Status, generic_message, GenericMessage, NetworkChanges};
 
 lazy_static! {
     static ref KNOWN_CLIENTS: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
-    //static ref NETWORK_CHANGES: Arc<Mutex<NetworkChanges>> = Arc::new(Mutex::new(NetworkChanges::new(vec![])));
+    static ref NETWORK_CHANGES: Arc<Mutex<NetworkChanges>> = Arc::new(Mutex::new(NetworkChanges::new(vec![])));
 }
 
 pub async fn start_server(args: ParsedArgs) -> std::io::Result<()> {
@@ -100,7 +100,11 @@ async fn join_network(
     let new_client = Client::new(addr, client_name.unwrap().to_string());
 
     println!("New client registered! {:?}", new_client);
-    KNOWN_CLIENTS.lock().await.push(new_client);
+    let change = NetworkChange::new(NetworkChangeType::JoinNetwork, Some(&new_client)).unwrap();
+    append_changes(vec![change]).await;
+    {
+        KNOWN_CLIENTS.lock().await.push(new_client);
+    }
     let response = result_response(Status::Ok, None);
     let response = serde_json::to_string(&response).unwrap();
     writer.write_all(response.as_bytes()).await?;
@@ -109,55 +113,17 @@ async fn join_network(
 }
 
 async fn check_updates(args: ParsedArgs) {
-    let mut clients_before = KNOWN_CLIENTS.lock().await.clone();
-    let mut changes: Vec<NetworkChange> = vec![];
     loop {
         sleep(args.update_client_interval).await; // Wait between checks
-        println!("Updating clients!");
-
-        let clients_now = KNOWN_CLIENTS.lock().await.clone();
-
-        let mut previous_ids: Vec<u64> = vec![];
-        let mut current_ids: Vec<u64> = vec![];
-
-        for client in &clients_before {
-            previous_ids.push(client.id);
-        }
-        for client in &clients_now {
-            current_ids.push(client.id);
-        }
-
-        for client in &clients_before {
-            if !current_ids.contains(&client.id) {
-                let message = network_change(NetworkChangeType::ExitNetwork, Some(client)).unwrap();
-                changes.push(message);
-                continue;
-            }
-            if !clients_now.contains(&client) {
-                let message = network_change(NetworkChangeType::ClientChange, Some(client)).unwrap();
-                changes.push(message);
-            }
-        }
-
-        for client in &clients_now {
-            if previous_ids.contains(&client.id) {
-                let message = network_change(NetworkChangeType::JoinNetwork, Some(client)).unwrap();
-                changes.push(message);
-            }
-        }
-
-        let changes_list = NetworkChanges::new(changes.clone());
-        for client in &clients_now {
-            let result = update_client(&changes_list, &client).await;
+        let locked_changes = NETWORK_CHANGES.lock().await;
+        let locked_clients = KNOWN_CLIENTS.lock().await;
+        for client in locked_clients.iter() {
+            let result = update_client(&locked_changes, client).await;
             if let Err(e) = result {
-                println!("Error while updating clients: {}", e);
+                println!("Error while updating client {}: {}", client.name, e);
             }
         }
-
-        clients_before = clients_now;
-        changes.clear();
     }
-
 }
 
 async fn update_client(updates: &NetworkChanges, client: &Client) -> std::io::Result<()> {
@@ -256,11 +222,21 @@ async fn check_if_dead(args: ParsedArgs) {
             }
         }
         // Remove dead clients from the list
+        let mut changes = vec![];
         {
             let locked_dead_clients_ids = dead_client_ids.lock().await;
             let mut locked_clients = KNOWN_CLIENTS.lock().await;
+            for client in locked_clients.iter() {
+                if locked_dead_clients_ids.contains(&client.id) {
+                    let change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(client)).unwrap();
+                    changes.push(change);
+                }
+            }
             locked_clients.retain(|client| !locked_dead_clients_ids.contains(&client.id));
         }
+
+        append_changes(changes).await;
+
         println!("End of vibe check!");
     }
 }
@@ -296,4 +272,9 @@ async fn vibe_check(client: &client::Client) -> bool {
         return false;
     }
     true
+}
+
+async fn append_changes(mut changes: Vec<NetworkChange>) {
+    let mut locked_changes = NETWORK_CHANGES.lock().await;
+    locked_changes.changes.append(&mut changes);
 }
