@@ -1,10 +1,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::vec::Vec;
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use serde::ser::SerializeSeq;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, std::cmp::Eq, PartialEq)]
 pub struct Client {
     pub id: u64,
     pub addr: std::net::SocketAddr,

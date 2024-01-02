@@ -1,3 +1,6 @@
+use core::time;
+use std::time::Duration;
+
 use clap::{command, Arg, ArgMatches};
 
 pub fn set_commands() -> ArgMatches {
@@ -13,25 +16,53 @@ pub fn set_commands() -> ArgMatches {
         .arg(
             Arg::new("port")
                 .short('p')
+                .long("port")
+                .value_parser(clap::value_parser!(u16))
+        )
+        .arg(
+            Arg::new("update_interval")
+                .short('u')
+                .long("update_interval")
+                .value_parser(clap::value_parser!(u64))
+        )
+        .arg(
+            Arg::new("vibe_check_interval")
+                .short('v')
+                .long("vibe_check_interval")
+                .value_parser(clap::value_parser!(u64))
         )
         .get_matches();
 
     match_result
 }
 
-pub fn parse_commands(matches: ArgMatches) -> ParsedCommands {
+pub fn parse_commands(matches: ArgMatches) -> ParsedArgs {
     let mut port: u16 = 10002; //Default port
-    if let Some(command_port) = matches.get_one::<u16>("port") {
-        port = *command_port;
+    let mut update_client_interval = time::Duration::from_secs(15);
+    let mut vibe_check_interval = time::Duration::from_secs(15);
+
+    if let Some(value) = matches.get_one::<u16>("port") {
+        port = *value;
     }
-    ParsedCommands {
+    if let Some(value) = matches.get_one::<u64>("update_interval") {
+        update_client_interval = time::Duration::from_secs(*value);
+    }
+    if let Some(value) = matches.get_one::<u64>("update_interval") {
+        vibe_check_interval = time::Duration::from_secs(*value);
+    }
+    
+    ParsedArgs{
         port,
+        update_client_interval,
+        vibe_check_interval,
     }
 }
 
-
-pub struct ParsedCommands {
+#[derive(Debug, Clone, Copy)]
+pub struct ParsedArgs {
     pub port: u16,
+    pub update_client_interval: Duration,
+    pub vibe_check_interval: Duration,
 }
 // pub struct InitVars {
 //     app_name: String,

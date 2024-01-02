@@ -1,31 +1,37 @@
-use serde::de::value;
 use serde_json::Value;
-use tokio::{net::{TcpListener, TcpStream, tcp::{WriteHalf, ReadHalf}}, io::{AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt}, time};
+use tokio::{net::{TcpListener, TcpStream, tcp::WriteHalf}, io::{AsyncWriteExt, BufReader, AsyncBufReadExt}, time};
 use lazy_static::lazy_static;
 use tokio::time::sleep;
 use tokio::sync::{Mutex, mpsc};
-use std::{str::from_utf8, sync::Arc};
+use std::sync::Arc;
+
 
 mod client;
 mod responses;
 
-use crate::{command_args::ParsedCommands, comms::{client::Client, responses::{ RequestType, get_request_type_str}}};
+use crate::{command_args::ParsedArgs, comms::{client::Client, responses::{ RequestType, network_change, NetworkChange, NetworkChangeType, get_request_type_str}}};
 
-use self::responses::{result_response, Status, generic_response};
+use self::responses::{result_response, Status, generic_message, GenericMessage, NetworkChanges};
 
 lazy_static! {
     static ref KNOWN_CLIENTS: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
+    //static ref NETWORK_CHANGES: Arc<Mutex<NetworkChanges>> = Arc::new(Mutex::new(NetworkChanges::new(vec![])));
 }
 
-pub async fn start_server(commands: ParsedCommands) -> std::io::Result<()> {
-    let addr = format!("127.0.0.1:{}", commands.port);
+pub async fn start_server(args: ParsedArgs) -> std::io::Result<()> {
+    let addr = format!("127.0.0.1:{}", args.port);
     let listener = TcpListener::bind(addr).await?;
+
+    println!("Listener started at port: {}", args.port);
     
     let mut handles = vec![];
 
-    handles.push(tokio::spawn(serve_client(listener)));
-    handles.push(tokio::spawn(check_if_dead()));
-    handles.push(tokio::spawn(update_clients()));
+    handles.push(tokio::spawn(serve_client(args, listener)));
+    println!("Listening for client requests");
+    handles.push(tokio::spawn(check_if_dead(args)));
+    println!("Vibe-checker ready. Vibe check every {} secs", args.vibe_check_interval.as_secs());
+    handles.push(tokio::spawn(check_updates(args)));
+    println!("Client updater ready. Update every {} secs", args.update_client_interval.as_secs());
 
     for handle in handles {
         handle.await.unwrap();
@@ -34,7 +40,7 @@ pub async fn start_server(commands: ParsedCommands) -> std::io::Result<()> {
     Ok(())
 }
 
-async fn serve_client(listener: TcpListener) {
+async fn serve_client(args: ParsedArgs, listener: TcpListener) {
     let mut buf = String::new();
     loop {
         buf.clear();
@@ -58,7 +64,7 @@ async fn serve_client(listener: TcpListener) {
             }
         };
         let result = match get_request_type_str(&buf) {
-            Ok((RequestType::join_network, value)) => join_network(&mut writer, addr, value).await,
+            Ok((RequestType::JoinNetwork, value)) => join_network(&mut writer, addr, value).await,
             Err(e) => {
                 println!("Wrong request: {}", e);
                 //let _result = writer.write(&[UNKNOWN_REQUEST]).await;
@@ -85,7 +91,8 @@ async fn join_network(
 
     if let None = client_name {
         let error = "Client's name not found";
-        let response = result_response(Status::error, Some(error));
+        let response = result_response(Status::Error, Some(error));
+        let response = serde_json::to_string(&response).unwrap();
         writer.write_all(response.as_bytes()).await?;
         return Ok(())
     }
@@ -94,39 +101,98 @@ async fn join_network(
 
     println!("New client registered! {:?}", new_client);
     KNOWN_CLIENTS.lock().await.push(new_client);
-    let response = result_response(Status::ok, None);
+    let response = result_response(Status::Ok, None);
+    let response = serde_json::to_string(&response).unwrap();
     writer.write_all(response.as_bytes()).await?;
 
     Ok(())
 }
 
-async fn update_clients() {
-    let time_to_wait = time::Duration::from_secs(1200);
+async fn check_updates(args: ParsedArgs) {
+    let mut clients_before = KNOWN_CLIENTS.lock().await.clone();
+    let mut changes: Vec<NetworkChange> = vec![];
     loop {
-        sleep(time_to_wait).await; // Wait between checks
+        sleep(args.update_client_interval).await; // Wait between checks
         println!("Updating clients!");
-        let copied_clients;
-        {
-            copied_clients = KNOWN_CLIENTS.lock().await.clone();
+
+        let clients_now = KNOWN_CLIENTS.lock().await.clone();
+
+        let mut previous_ids: Vec<u64> = vec![];
+        let mut current_ids: Vec<u64> = vec![];
+
+        for client in &clients_before {
+            previous_ids.push(client.id);
         }
-        let serlialized_clients = serde_json::to_string(&copied_clients).unwrap();
-        for client in copied_clients {
-            let result = TcpStream::connect(client.addr).await;
-            if let Err(_) = result {
+        for client in &clients_now {
+            current_ids.push(client.id);
+        }
+
+        for client in &clients_before {
+            if !current_ids.contains(&client.id) {
+                let message = network_change(NetworkChangeType::ExitNetwork, Some(client)).unwrap();
+                changes.push(message);
                 continue;
             }
-            let mut stream = result.unwrap();
+            if !clients_now.contains(&client) {
+                let message = network_change(NetworkChangeType::ClientChange, Some(client)).unwrap();
+                changes.push(message);
+            }
+        }
 
-            let _ = stream.write(serlialized_clients.as_bytes()).await;
+        for client in &clients_now {
+            if previous_ids.contains(&client.id) {
+                let message = network_change(NetworkChangeType::JoinNetwork, Some(client)).unwrap();
+                changes.push(message);
+            }
+        }
+
+        let changes_list = NetworkChanges::new(changes.clone());
+        for client in &clients_now {
+            let result = update_client(&changes_list, &client).await;
+            if let Err(e) = result {
+                println!("Error while updating clients: {}", e);
+            }
+        }
+
+        clients_before = clients_now;
+        changes.clear();
+    }
+
+}
+
+async fn update_client(updates: &NetworkChanges, client: &Client) -> std::io::Result<()> {
+    if updates.changes.is_empty() {
+        return Ok(())
+    }
+    let mut buf = String::new();
+    let message = serde_json::to_string(updates).unwrap();
+
+    let mut stream = TcpStream::connect(client.addr).await?;
+    let (reader, mut writer) = stream.split();
+    let mut reader = BufReader::new(reader);
+
+    writer.write_all(message.as_bytes()).await?;
+    let _ = reader.read_line(&mut buf).await?;
+    let response: Result<GenericMessage, serde_json::Error> = serde_json::from_str(&buf);
+    if let Err(_) = response {
+        println!("Updating client failed. Cannot parse client's response");
+    }
+    let response = response.unwrap();
+    
+    if matches!(response.status, Status::Error) {
+        match response.error {
+            Some(e) => println!("Error while updating client: {}", e),
+            None => println!("Error while updating client, but no error description was given"),
         }
     }
+
+    Ok(())
 }
 
 // Function checking for dead clients
-async fn check_if_dead() {
-    let time_to_wait = time::Duration::from_secs(1200); // Time to wait between each check
+async fn check_if_dead(args: ParsedArgs) {
     loop {
-        sleep(time_to_wait).await; // Wait between checks
+        sleep(args.vibe_check_interval).await; // Wait between checks
         println!("Runs vibe check!");
 
         // Vector containing ids of dead clients
@@ -174,7 +240,7 @@ async fn check_if_dead() {
                                 copy_tx.send(client.id).await.unwrap();
                             }
                         }
-                        _ = sleep(time_to_wait) => {
+                        _ = sleep(time::Duration::from_secs(10)) => {
                             println!("Client {} is dead", client.name);
                             copy_tx.send(client.id).await.unwrap();
                         }
@@ -206,12 +272,13 @@ async fn vibe_check(client: &client::Client) -> bool {
     if let Err(_) = stream {
         return false;
     }
-    let mut stream = stream.unwrap();
+    let mut stream = stream.unwrap(); // Can safely unwrap
+
     let (reader, mut writer) = stream.split();
     let mut reader = BufReader::new(reader);
 
-    let response = generic_response(RequestType::vibe_check, Status::ok, None);
-
+    let response = generic_message(RequestType::VibeCheck, Status::Ok, None);
+    let response = serde_json::to_string(&response).unwrap();
     let result = writer.write_all(response.as_bytes()).await;
     if let Err(_) = result {
         return false;
@@ -220,11 +287,12 @@ async fn vibe_check(client: &client::Client) -> bool {
     if let Err(_) = result {
         return false;
     }
-    let request_type = match get_request_type_str(&buf) {
-        Ok((req_type, _)) => req_type,
-        Err(_) => return false,
-    };
-    if let RequestType::still_alive = request_type {
+    let response: Result<GenericMessage, serde_json::Error> = serde_json::from_str(&buf);
+    if let Err(_) = response {
+        println!("Vibe-checking. Cannot parse client's response");
+    }
+    let response = response.unwrap();
+    if let RequestType::StillAlive = response.response_type {
         return false;
     }
     true
