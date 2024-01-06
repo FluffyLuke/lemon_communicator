@@ -4,15 +4,11 @@ use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
 use strum_macros::EnumString;
 
-use super::client::Client;
+use crate::comms::client::Client;
 
-//
-// Enums
-//
-
-extern crate strum;
+// Used to describe the purpose of a message
 #[derive(EnumString, Debug, Serialize, Deserialize)]
-pub enum RequestType {
+pub enum MessageType {
     #[serde(rename="join_network")]
     JoinNetwork,
     #[serde(rename="result")]
@@ -31,19 +27,7 @@ pub enum RequestType {
     GetNetworkState,
 }
 
-#[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
-pub enum NetworkChangeType {
-    #[serde(rename="exit_network")]
-    ExitNetwork,
-    #[serde(rename="join_network")]
-    JoinNetwork,
-    #[serde(rename="client_change")]
-    ClientChange,
-    #[serde(rename="server_shutdown")]
-    ServerShutdown,
-}
-
-
+// Used to describe the status of a message 
 #[derive(Debug, Serialize, Deserialize, EnumString)]
 pub enum Status {
     #[serde(rename="ok")]
@@ -71,59 +55,42 @@ impl fmt::Display for Status {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum RequestError {
+pub enum MessageError {
     BadJSON,
     BadType,
     CouldNotFound(&'static str)
 }
 
-impl fmt::Display for RequestError {
+impl fmt::Display for MessageError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RequestError::BadJSON=> {
+            MessageError::BadJSON=> {
                 write!(f, "Request wasn't a JSON or has a bad structure")
             }
-            RequestError::CouldNotFound(field) => {
+            MessageError::CouldNotFound(field) => {
                 write!(f, "Could not found field \"{}\" in request", field)
             }
-            RequestError::BadType=> {
+            MessageError::BadType=> {
                 write!(f, "Wrong type was used in request")
             }
         }
     }
 }
 
-pub type NetChangeMesErr = NetworkChangeMessageError;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum NetworkChangeMessageError {
-    ClientNotProvided
-}
-
-impl fmt::Display for NetworkChangeMessageError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            NetworkChangeMessageError => {
-                write!(f, "Change was about a client, but the client was not provided")
-            }
-        }
-    }
-}
-
 //
-//  MESSAGES
+// Generic message
 //
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GenericMessage {
     #[serde(rename="type")]
-    pub response_type: RequestType,
+    pub response_type: MessageType,
     pub status: Status,
     pub error: Option<String>
 }
 
 impl GenericMessage {
-    pub fn new(message_type: RequestType, status: Status, error: Option<&str>) -> GenericMessage {
+    pub fn new(message_type: MessageType, status: Status, error: Option<&str>) -> GenericMessage {
         let error = match error {
             Some(err) => err,
             None => "null",
@@ -143,7 +110,7 @@ impl GenericMessage {
             None => "null",
         };
         let message = json!({
-            "type": RequestType::Result,
+            "type": MessageType::Result,
             "status": status,
             "error": error,
         });
@@ -153,20 +120,37 @@ impl GenericMessage {
     }
 }
 
+//
+//  Network messages
+//
+
+#[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
+pub enum NetworkChangeType {
+    #[serde(rename="exit_network")]
+    ExitNetwork,
+    #[serde(rename="join_network")]
+    JoinNetwork,
+    #[serde(rename="client_change")]
+    ClientChange,
+    #[serde(rename="server_shutdown")]
+    ServerShutdown,
+}
+
+
 #[derive(Deserialize, Serialize, Debug)]
-pub struct NetworkState {
+pub struct NetworkStateMessage {
     #[serde(rename="type")]
-    pub response_type: RequestType,
+    pub response_type: MessageType,
     pub status: Status,
     pub error: Option<String>,
 
     pub clients: Vec<Client>
 }
 
-impl NetworkState {
-    pub fn new(clients: Vec<Client>) -> NetworkState {
-        NetworkState {
-            response_type: RequestType::GetNetworkState,
+impl NetworkStateMessage {
+    pub fn new(clients: Vec<Client>) -> NetworkStateMessage {
+        NetworkStateMessage {
+            response_type: MessageType::GetNetworkState,
             status: Status::Ok,
             error: None,
             clients
@@ -175,19 +159,19 @@ impl NetworkState {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct NetworkChanges {
+pub struct NetworkChangesMessage {
     #[serde(rename="type")]
-    pub response_type: RequestType,
+    pub response_type: MessageType,
     pub status: Status,
     pub error: Option<String>,
     
     pub changes: Vec<NetworkChange>
 }
 
-impl NetworkChanges {
-    pub fn new(changes: Vec<NetworkChange>) -> NetworkChanges {
-        NetworkChanges {
-            response_type: RequestType::NetworkChange,
+impl NetworkChangesMessage {
+    pub fn new(changes: Vec<NetworkChange>) -> NetworkChangesMessage {
+        NetworkChangesMessage {
+            response_type: MessageType::NetworkChange,
             status: Status::Ok,
             error: None,
             changes
@@ -248,48 +232,63 @@ impl NetworkChange {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum NetworkChangeMessageError {
+    ClientNotProvided
+}
+
+pub type NetChangeMesErr = NetworkChangeMessageError;
+
+//
+// Client requests messages
+//
+
 #[derive(Deserialize, Serialize, Debug)]
-pub struct JoinNetwork {
+pub struct JoinNetworkMessage {
     #[serde(rename="type")]
-    pub response_type: RequestType,
+    pub response_type: MessageType,
     pub status: Status,
     pub error: Option<String>,
     pub client: Client,
 }
-pub type DeadClient = JoinNetwork;
+pub type DeadClientMessage = JoinNetworkMessage;
 
-pub fn get_request_type_str(request: &str) -> Result<(RequestType, Value), RequestError> {
+//
+//  additional functions
+//
+
+pub fn get_request_type_str(request: &str) -> Result<(MessageType, Value), MessageError> {
     let field = "type";
     println!("{}", request);
     let root: Value = serde_json::from_str(request)
-        .map_err(|_| RequestError::BadJSON)?;
+        .map_err(|_| MessageError::BadJSON)?;
     let request = root.get(field);
 
     if let None = request {
-        return Err(RequestError::CouldNotFound(field));
+        return Err(MessageError::CouldNotFound(field));
     }
     let request = request.unwrap().as_str().unwrap();
-    let request = RequestType::from_str(request);
+    let request = MessageType::from_str(request);
 
     if let Err(_) = request {
-        return Err(RequestError::BadType);
+        return Err(MessageError::BadType);
     }
 
     Ok((request.unwrap(), root))
 }
 
-pub fn get_request_type_value(root: Value) -> Result<(RequestType, Value), RequestError> {
+pub fn get_request_type_value(root: Value) -> Result<(MessageType, Value), MessageError> {
     let field = "type";
     let request = root.get(field);
 
     if let None = request {
-        return Err(RequestError::CouldNotFound(field));
+        return Err(MessageError::CouldNotFound(field));
     }
     let request = request.unwrap().as_str().unwrap();
-    let request = RequestType::from_str(request);
+    let request = MessageType::from_str(request);
 
     if let Err(_) = request {
-        return Err(RequestError::BadType);
+        return Err(MessageError::BadType);
     }
 
     Ok((request.unwrap(), root))
