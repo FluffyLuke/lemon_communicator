@@ -3,7 +3,7 @@ use tokio::{net::{TcpListener, TcpStream, tcp::WriteHalf}, io::{AsyncWriteExt, B
 use lazy_static::lazy_static;
 use tokio::time::sleep;
 use tokio::sync::{Mutex, mpsc};
-use std::sync::Arc;
+use std::{sync::Arc, ops::Index};
 
 
 mod client;
@@ -11,7 +11,7 @@ mod responses;
 
 use crate::{command_args::ParsedArgs, comms::{client::Client, responses::{ RequestType, NetworkChange, get_request_type_str, NetworkChangeType}}};
 
-use self::responses::{result_response, Status, generic_message, GenericMessage, NetworkChanges};
+use self::responses::{Status, GenericMessage, NetworkChanges, DeadClient, NetworkState};
 
 lazy_static! {
     static ref KNOWN_CLIENTS: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
@@ -65,18 +65,84 @@ async fn serve_client(args: ParsedArgs, listener: TcpListener) {
         };
         let result = match get_request_type_str(&buf) {
             Ok((RequestType::JoinNetwork, value)) => join_network(&mut writer, addr, value).await,
+            Ok((RequestType::FoundDeadClient, value)) => found_dead_client(&mut writer, value).await,
+            Ok((RequestType::ExitNetwork, _)) => exit_network(&mut writer, addr).await,
+            Ok((RequestType::GetNetworkState, _)) => give_network_state(&mut writer).await,
             Err(e) => {
-                println!("Wrong request: {}", e);
-                //let _result = writer.write(&[UNKNOWN_REQUEST]).await;
-                continue;
+                println!("Cannot parse client's request: {}", e);
+                wrong_request(&mut writer).await
             }
-            _ => todo!(),
+            Ok((_other_request_type, _)) => {
+                println!("Wrong request provided by client",);
+                wrong_request(&mut writer).await
+            },
         };
     
         if let Err(e) = result {
             eprintln!("Error while serving client: {:?}", e);
         }
     }
+}
+
+async fn wrong_request(writer: &mut WriteHalf<'_>) -> std::io::Result<()> {
+    let error = "Wrong request";
+    let response = GenericMessage::result(Status::Error, Some(error));
+    let response = serde_json::to_string(&response).unwrap();
+    writer.write_all(response.as_bytes()).await?;
+    Ok(())
+}
+
+
+async fn give_network_state(writer: &mut WriteHalf<'_>) -> std::io::Result<()> {
+    let network_state;
+    {
+        let locked_clients = KNOWN_CLIENTS.lock().await;
+        network_state = NetworkState::new(locked_clients.clone());
+    }
+    let response = serde_json::to_string(&network_state).unwrap();
+    writer.write_all(response.as_bytes()).await?;
+    Ok(())
+}
+
+async fn exit_network(
+    writer: &mut WriteHalf<'_>,
+    addr: std::net::SocketAddr) -> std::io::Result<()>
+{
+    let result = remove_client_from_clients_by_addr(addr).await;
+    if result == None {
+        let error = "Client not found";
+        let response = GenericMessage::result(Status::Error, Some(error));
+        let response = serde_json::to_string(&response).unwrap();
+        writer.write_all(response.as_bytes()).await?;
+    }
+
+    let response = GenericMessage::result(Status::Ok, None);
+    let response = serde_json::to_string(&response).unwrap();
+    writer.write_all(response.as_bytes()).await?;
+    Ok(())
+}
+
+async fn found_dead_client(
+    writer: &mut WriteHalf<'_>, 
+    request: Value) -> std::io::Result<()> 
+{
+    let parsed_request: Result<DeadClient, serde_json::Error> = serde_json::from_str(&request.to_string());
+    if let Err(_) = parsed_request {
+        let error = "Wrong request";
+        let response = GenericMessage::result(Status::Error, Some(error));
+        let response = serde_json::to_string(&response).unwrap();
+        writer.write_all(response.as_bytes()).await?;
+    }
+
+    let unwrapped_request = parsed_request.unwrap();
+    let result = vibe_check(&unwrapped_request.client).await;
+    if !result {
+        let _result = remove_client_from_clients(&unwrapped_request.client).await;
+    }
+    let response = GenericMessage::result(Status::Ok, None);
+    let response = serde_json::to_string(&response).unwrap();
+    writer.write_all(response.as_bytes()).await?;
+    Ok(())
 }
 
 async fn join_network(
@@ -91,7 +157,7 @@ async fn join_network(
 
     if let None = client_name {
         let error = "Client's name not found";
-        let response = result_response(Status::Error, Some(error));
+        let response = GenericMessage::result(Status::Error, Some(error));
         let response = serde_json::to_string(&response).unwrap();
         writer.write_all(response.as_bytes()).await?;
         return Ok(())
@@ -105,7 +171,7 @@ async fn join_network(
     {
         KNOWN_CLIENTS.lock().await.push(new_client);
     }
-    let response = result_response(Status::Ok, None);
+    let response = GenericMessage::result(Status::Ok, None);
     let response = serde_json::to_string(&response).unwrap();
     writer.write_all(response.as_bytes()).await?;
 
@@ -115,8 +181,8 @@ async fn join_network(
 async fn check_updates(args: ParsedArgs) {
     loop {
         sleep(args.update_client_interval).await; // Wait between checks
-        let locked_changes = NETWORK_CHANGES.lock().await;
         let locked_clients = KNOWN_CLIENTS.lock().await;
+        let locked_changes = NETWORK_CHANGES.lock().await;
         for client in locked_clients.iter() {
             let result = update_client(&locked_changes, client).await;
             if let Err(e) = result {
@@ -253,7 +319,7 @@ async fn vibe_check(client: &client::Client) -> bool {
     let (reader, mut writer) = stream.split();
     let mut reader = BufReader::new(reader);
 
-    let response = generic_message(RequestType::VibeCheck, Status::Ok, None);
+    let response = GenericMessage::new(RequestType::VibeCheck, Status::Ok, None);
     let response = serde_json::to_string(&response).unwrap();
     let result = writer.write_all(response.as_bytes()).await;
     if let Err(_) = result {
@@ -277,4 +343,25 @@ async fn vibe_check(client: &client::Client) -> bool {
 async fn append_changes(mut changes: Vec<NetworkChange>) {
     let mut locked_changes = NETWORK_CHANGES.lock().await;
     locked_changes.changes.append(&mut changes);
+}
+
+async fn remove_client_from_clients(client: &Client) -> Option<()>{
+    let mut locked_clients = KNOWN_CLIENTS.lock().await;
+    let mut locked_changes = NETWORK_CHANGES.lock().await;
+    let position = locked_clients.iter().position(&|locked_client: &Client| locked_client.id == client.id)?;
+    let change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(&client)).unwrap();
+    locked_clients.remove(position);
+    locked_changes.changes.append(&mut vec![change]);
+    Some(())
+}
+
+async fn remove_client_from_clients_by_addr(addr: std::net::SocketAddr) -> Option<()>{
+    let mut locked_clients = KNOWN_CLIENTS.lock().await;
+    let mut locked_changes = NETWORK_CHANGES.lock().await;
+    let position = locked_clients.iter().position(&|locked_client: &Client| locked_client.addr == addr)?;
+    let client = locked_clients.index(position);
+    let change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(&client)).unwrap();
+    locked_clients.remove(position);
+    locked_changes.changes.append(&mut vec![change]);
+    Some(())
 }

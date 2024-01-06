@@ -23,6 +23,12 @@ pub enum RequestType {
     VibeCheck,
     #[serde(rename="network_change")]
     NetworkChange,
+    #[serde(rename="found_dead_client")]
+    FoundDeadClient,
+    #[serde(rename="exit_network")]
+    ExitNetwork,
+    #[serde(rename="get_network_state")]
+    GetNetworkState,
 }
 
 #[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
@@ -107,6 +113,7 @@ impl fmt::Display for NetworkChangeMessageError {
 //
 //  MESSAGES
 //
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GenericMessage {
     #[serde(rename="type")]
@@ -115,38 +122,39 @@ pub struct GenericMessage {
     pub error: Option<String>
 }
 
-pub fn generic_message(message_type: RequestType, status: Status, error: Option<&str>) -> GenericMessage {
-    let error = match error {
-        Some(err) => err,
-        None => "null",
-    };
-    let message = json!({
-        "type": message_type,
-        "status": status,
-        "error": error,
-    });
-    let message = message.as_str().unwrap();
-    let message: GenericMessage = serde_json::from_str(message).unwrap();
-    message
-}
-
-pub fn result_response(status: Status, error: Option<&str>) -> GenericMessage {
-    let error = match error {
-        Some(err) => err,
-        None => "null",
-    };
-    let message = json!({
-        "type": RequestType::Result,
-        "status": status,
-        "error": error,
-    });
-    let message = message.as_str().unwrap();
-    let message: GenericMessage = serde_json::from_str(message).unwrap();
-    message
+impl GenericMessage {
+    pub fn new(message_type: RequestType, status: Status, error: Option<&str>) -> GenericMessage {
+        let error = match error {
+            Some(err) => err,
+            None => "null",
+        };
+        let message = json!({
+            "type": message_type,
+            "status": status,
+            "error": error,
+        });
+        let message = message.as_str().unwrap();
+        let message: GenericMessage = serde_json::from_str(message).unwrap();
+        message
+    }
+    pub fn result(status: Status, error: Option<&str>) -> GenericMessage {
+        let error = match error {
+            Some(err) => err,
+            None => "null",
+        };
+        let message = json!({
+            "type": RequestType::Result,
+            "status": status,
+            "error": error,
+        });
+        let message = message.as_str().unwrap();
+        let message: GenericMessage = serde_json::from_str(message).unwrap();
+        message
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct NetworkStateMessage {
+pub struct NetworkState {
     #[serde(rename="type")]
     pub response_type: RequestType,
     pub status: Status,
@@ -155,21 +163,15 @@ pub struct NetworkStateMessage {
     pub clients: Vec<Client>
 }
 
-
-pub fn network_state_response(message_type: &str, status: Status, error: Option<&str>, clients: &mut Vec<Client>) -> NetworkStateMessage {
-    let error = match error {
-        Some(err) => err,
-        None => "null",
-    };
-    let message = json!({
-        "type": message_type,
-        "status": status,
-        "error": error,
-        "clients": serde_json::to_string(clients).unwrap()
-    });
-    let message = message.as_str().unwrap();
-    let message: NetworkStateMessage = serde_json::from_str(message).unwrap();
-    message
+impl NetworkState {
+    pub fn new(clients: Vec<Client>) -> NetworkState {
+        NetworkState {
+            response_type: RequestType::GetNetworkState,
+            status: Status::Ok,
+            error: None,
+            clients
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -246,6 +248,15 @@ impl NetworkChange {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct JoinNetwork {
+    #[serde(rename="type")]
+    pub response_type: RequestType,
+    pub status: Status,
+    pub error: Option<String>,
+    pub client: Client,
+}
+pub type DeadClient = JoinNetwork;
 
 pub fn get_request_type_str(request: &str) -> Result<(RequestType, Value), RequestError> {
     let field = "type";
