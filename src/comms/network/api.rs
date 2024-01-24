@@ -4,25 +4,40 @@ use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
 use strum_macros::EnumString;
 
-use crate::comms::client::Client;
+use crate::comms::client::{Client, WeakClient, GetWeak};
 
 // Used to describe the purpose of a message
 #[derive(EnumString, Debug, Serialize, Deserialize)]
 pub enum MessageType {
+    #[strum(serialize = "join_network")]
     #[serde(rename="join_network")]
     JoinNetwork,
+
+    #[strum(serialize = "result")]
     #[serde(rename="result")]
     Result,
+
+    #[strum(serialize = "still_alive")]
     #[serde(rename="still_alive")]
     StillAlive,
+
+    #[strum(serialize = "vibe_check")]
     #[serde(rename="vibe_check")]
     VibeCheck,
+
+    #[strum(serialize = "network_change")]
     #[serde(rename="network_change")]
     NetworkChange,
+
+    #[strum(serialize = "found_dead_client")]
     #[serde(rename="found_dead_client")]
     FoundDeadClient,
+
+    #[strum(serialize = "exit_network")]
     #[serde(rename="exit_network")]
     ExitNetwork,
+
+    #[strum(serialize = "get_network_state")]
     #[serde(rename="get_network_state")]
     GetNetworkState,
 }
@@ -100,10 +115,11 @@ impl GenericMessage {
             "status": status,
             "error": error,
         });
-        let message = message.as_str().unwrap();
-        let message: GenericMessage = serde_json::from_str(message).unwrap();
+        let message = message.to_string();
+        let message: GenericMessage = serde_json::from_str(&message).unwrap();
         message
     }
+
     pub fn result(status: Status, error: Option<&str>) -> GenericMessage {
         let error = match error {
             Some(err) => err,
@@ -114,8 +130,8 @@ impl GenericMessage {
             "status": status,
             "error": error,
         });
-        let message = message.as_str().unwrap();
-        let message: GenericMessage = serde_json::from_str(message).unwrap();
+        let message = message.to_string();
+        let message: GenericMessage = serde_json::from_str(&message).unwrap();
         message
     }
 }
@@ -144,11 +160,24 @@ pub struct NetworkStateMessage {
     pub status: Status,
     pub error: Option<String>,
 
-    pub clients: Vec<Client>
+    pub clients: Vec<WeakClient>
 }
 
 impl NetworkStateMessage {
-    pub fn new(clients: Vec<Client>) -> NetworkStateMessage {
+    pub fn new(clients: &Vec<Client>) -> NetworkStateMessage {
+        let mut weak_clients = vec![];
+        for client in clients {
+            weak_clients.push(client.weak());
+        }
+
+        NetworkStateMessage {
+            response_type: MessageType::GetNetworkState,
+            status: Status::Ok,
+            error: None,
+            clients: weak_clients
+        }
+    }
+    pub fn from_weak(clients: Vec<WeakClient>) -> NetworkStateMessage {
         NetworkStateMessage {
             response_type: MessageType::GetNetworkState,
             status: Status::Ok,
@@ -183,51 +212,20 @@ impl NetworkChangesMessage {
 pub struct NetworkChange {
     #[serde(rename="type")]
     pub change_type: NetworkChangeType,
-    pub client: Option<Client>
+    pub client: Option<WeakClient>
 }
 
 impl NetworkChange {
-    pub fn new(change_type: NetworkChangeType, client: Option<&Client>) -> Result<NetworkChange, NetworkChangeMessageError> {
-        let change = match change_type {
-            NetworkChangeType::ClientChange => {
-                let client = match client{
-                    Some(client) => client,
-                    None => return Err(NetChangeMesErr::ClientNotProvided),
-                };
-                json!({
-                    "type": NetworkChangeType::ClientChange,
-                    "id": client.id,
-                    "client_addr": client.addr,
-                    "client_name": client.name,
-                })
-            },
-            NetworkChangeType::ExitNetwork => {
-                let client = match client{
-                    Some(client) => client,
-                    None => return Err(NetChangeMesErr::ClientNotProvided),            
-                };
-                json!({
-                    "type": NetworkChangeType::ExitNetwork,
-                    "id": client.id,
-                })
-            },
-            NetworkChangeType::JoinNetwork => {
-                let client = match client{
-                    Some(client) => client,
-                    None => return Err(NetChangeMesErr::ClientNotProvided),
-                };
-                json!({
-                    "type": NetworkChangeType::JoinNetwork,
-                    "id": client.id,
-                })
-            },
-            NetworkChangeType::ServerShutdown => {
-                json!({
-                    "type": NetworkChangeType::ServerShutdown,
-                })
-            },
+    pub fn new(change_type: NetworkChangeType, client: Option<WeakClient>) -> Result<NetworkChange, NetworkChangeMessageError> {
+        //TODO make a better version of this function!!!
+        let client = match client {
+            Some(client) => Some(client),
+            None => None,
         };
-        let change = serde_json::from_str(change.as_str().unwrap()).unwrap();
+        let change = NetworkChange {
+            change_type,
+            client
+        };
         Ok(change)
     }
 }
@@ -249,7 +247,7 @@ pub struct JoinNetworkMessage {
     pub response_type: MessageType,
     pub status: Status,
     pub error: Option<String>,
-    pub client: Client,
+    pub client: WeakClient,
 }
 pub type DeadClientMessage = JoinNetworkMessage;
 

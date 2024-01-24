@@ -47,7 +47,7 @@ pub fn parse_commands(matches: ArgMatches) -> ParsedArgs {
     if let Some(value) = matches.get_one::<u64>("update_interval") {
         update_client_interval = time::Duration::from_secs(*value);
     }
-    if let Some(value) = matches.get_one::<u64>("update_interval") {
+    if let Some(value) = matches.get_one::<u64>("vibe_check_interval") {
         vibe_check_interval = time::Duration::from_secs(*value);
     }
     
@@ -64,16 +64,3 @@ pub struct ParsedArgs {
     pub update_client_interval: Duration,
     pub vibe_check_interval: Duration,
 }
-// pub struct InitVars {
-//     app_name: String,
-//     version: String,
-// }
-
-// impl InitVars {
-//     pub fn new(app_name: String, version: String) -> InitVars {
-//         return InitVars {
-//             app_name,
-//             version
-//         }
-//     }
-// }
