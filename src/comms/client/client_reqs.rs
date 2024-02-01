@@ -1,9 +1,11 @@
+use std::fmt;
+
 use serde_json::Value;
-use tokio::{net::tcp::WriteHalf, io::{AsyncWriteExt, BufReader}};
+use tokio::io::AsyncWriteExt;
 
-use crate::comms::{network::{api::{GenericMessage, Status, NetworkChange, NetworkChangeType, DeadClientMessage, NetworkStateMessage}, vibe_check}, client::{Client, KNOWN_CLIENTS}};
+use crate::comms::network::api::{GenericMessage, Status};
 
-use super::GetAddr;
+use super::{Client, RegisteredClient, KNOWN_CLIENTS};
 
 
 pub async fn give_network_state(client: &mut Client) -> std::io::Result<()> {
@@ -53,10 +55,10 @@ pub async fn exit_network(client: &mut Client) -> std::io::Result<()> {
 
 // TODO Change the way value is being unpacked, maybe into a struct 
 pub async fn join_network(
-    mut socket: tokio::net::TcpStream,
+    mut socket: tokio::io::BufReader<tokio::net::TcpStream>,
     addr: std::net::SocketAddr, 
     request: Value) 
-    -> std::io::Result<()> {
+    -> Result<Client, JoinError> {
     let client_name = request.get("client")
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str());
@@ -65,14 +67,34 @@ pub async fn join_network(
         let error = "Client's name not found";
         let response = GenericMessage::result(Status::Error, Some(error));
         let response = serde_json::to_string(&response).unwrap();
-        socket.write_all(response.as_bytes()).await?;
-        return Ok(())
+        socket.write_all(response.as_bytes()).await.map_err(|err| JoinError::IOError(err))?;
+        return Err(JoinError::BadJSON)
     }
 
-    let mut new_client = Client::new(addr,client_name.unwrap().to_string(), BufReader::new(socket));
+    let mut new_client = Client::new(addr,client_name.unwrap().to_string(), socket);
     let response = GenericMessage::result(Status::Ok, None);
     let response = serde_json::to_string(&response).unwrap();
-    new_client.stream.write_all(response.as_bytes()).await?;
-    KNOWN_CLIENTS.add(new_client);
-    Ok(())
+    let registered_client = RegisteredClient::from(&new_client);
+    new_client.stream.write_all(response.as_bytes()).await.map_err(|err| JoinError::IOError(err))?;
+    KNOWN_CLIENTS.add(registered_client);
+    Ok(new_client)
+}
+
+#[derive(Debug)]
+pub enum JoinError {
+    BadJSON,
+    IOError(std::io::Error)
+}
+
+impl fmt::Display for JoinError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            JoinError::BadJSON=> {
+                write!(f, "Request wasn't a JSON or has a bad structure")
+            }
+            JoinError::IOError(field) => {
+                write!(f, "{}", field)
+            }
+        }
+    }
 }

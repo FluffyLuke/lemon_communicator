@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
 use strum_macros::EnumString;
 
-use crate::comms::client::{Client, WeakClient, GetWeak};
+use crate::comms::client::WeakClient;
 
 // Used to describe the purpose of a message
 #[derive(EnumString, Debug, Serialize, Deserialize)]
@@ -164,25 +164,12 @@ pub struct NetworkStateMessage {
 }
 
 impl NetworkStateMessage {
-    pub fn new(clients: &Vec<Client>) -> NetworkStateMessage {
-        let mut weak_clients = vec![];
-        for client in clients {
-            weak_clients.push(client.weak());
-        }
-
+    pub fn new(clients: &Vec<WeakClient>) -> NetworkStateMessage {
         NetworkStateMessage {
             response_type: MessageType::GetNetworkState,
             status: Status::Ok,
             error: None,
-            clients: weak_clients
-        }
-    }
-    pub fn from_weak(clients: Vec<WeakClient>) -> NetworkStateMessage {
-        NetworkStateMessage {
-            response_type: MessageType::GetNetworkState,
-            status: Status::Ok,
-            error: None,
-            clients
+            clients: clients.to_vec()
         }
     }
 }
