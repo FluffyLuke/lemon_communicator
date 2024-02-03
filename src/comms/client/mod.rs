@@ -123,7 +123,7 @@ impl KnownClients {
         }
         for (rx, client) in receivers {
             if !rx.await.unwrap() {
-                self.remove(&client);
+                self.remove(&client).await;
             }
         }
     }
