@@ -38,6 +38,7 @@ pub async fn found_dead_client(client: &mut Client, request: Value) -> std::io::
         let response = GenericMessage::result(Status::Error, Some(error));
         let response = serde_json::to_string(&response).unwrap();
         client.stream.write_all(response.as_bytes()).await?;
+        return Ok(());
     }
 
     let unwrapped_request = parsed_request.unwrap();

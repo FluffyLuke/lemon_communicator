@@ -1,18 +1,15 @@
-use tokio::sync::mpsc::Receiver;
+use tokio::{io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::TcpStream};
 
-use tokio::{io::{AsyncBufReadExt, BufReader}, net::TcpStream};
-
-use crate::comms::client::client_reqs;
+use crate::comms::{client::client_reqs, network::api::DeadClientMessage};
 use crate::comms::network::api::{get_request_type_str, MessageType};
 use crate::comms::wrong_request;
 
-use super::{Client, ServerActions};
+use super::{Client, ServerActions, WeakClient};
 
 pub async fn client_handler(mut client: Client) {
-    //let parsed_request: Result<DeadClientMessage, serde_json::Error> = serde_json::from_str(&request.to_string());
     let mut buffer = String::new();
-    
     loop {
+        //client.stream.write_all(serde_json::to_string(&message).unwrap().as_bytes()).await.unwrap();
         tokio::select! {
             val = next_request(&mut client.stream, &mut buffer) => {
                 if let Err(e) = val {
@@ -24,7 +21,7 @@ pub async fn client_handler(mut client: Client) {
                     Ok((MessageType::ExitNetwork, _)) => client_reqs::exit_network(&mut client).await,
                     Ok((MessageType::FoundDeadClient, value)) => client_reqs::found_dead_client(&mut client, value).await,
                     Err(e) => {
-                        println!("Cannot parse client's request: {}", e);
+                        println!("Cannot parse registered client's request: {}", e);
                         let result = wrong_request(&mut client.stream).await;
                         if let Err(err) = result {
                             eprintln!("Error while serving a registered client: {}", err);
@@ -45,10 +42,9 @@ pub async fn client_handler(mut client: Client) {
                     eprintln!("Error while serving a registered client: {}", err);
                 }
             }
-            _val = server_request(&mut client.receiver) => {
-                // TODO
-            }
+            val = client.receiver.recv() => server_request(&mut client, val.unwrap()).await
         }
+        buffer.clear();
     }
 }
 
@@ -56,6 +52,26 @@ async fn next_request(stream: &mut BufReader<TcpStream>, buffer: &mut String) ->
     stream.read_line(buffer).await?;
     Ok(())
 }
-async fn server_request(receiver: &mut Receiver<ServerActions>) {
-    todo!()
+
+// TODO if fails, make it check if client is alive
+async fn server_request(client: &mut Client, request: ServerActions) {
+    match request {
+        ServerActions::UpdateClient(sender, updates) => {
+            let result = client.update_client(&updates).await;
+            if let Err(err) = result {
+                eprintln!("Error while updating a registered client: {}", err);
+                sender.send(false).unwrap();
+                return
+            }
+            sender.send(true).unwrap();
+        }
+        ServerActions::CheckIfDead(sender) => {
+            let if_dead = client.vibe_check().await;
+            if if_dead {
+                sender.send(false).unwrap();
+                return;
+            }
+            sender.send(true).unwrap();
+        }
+    }
 }

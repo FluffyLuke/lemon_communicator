@@ -185,6 +185,7 @@ impl Client {
             receiver: rx,
         }
     }
+    // TODO make it wait n secs before aborting
     pub async fn vibe_check(&mut self) -> bool {
         let mut buf = String::new();
         let response = GenericMessage::new(MessageType::VibeCheck, Status::Ok, None);

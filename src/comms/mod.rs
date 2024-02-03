@@ -19,7 +19,7 @@ pub async fn start_server(args: ParsedArgs) -> std::io::Result<()> {
     handles.push(tokio::spawn(serve_client(args, listener)));
     println!("Listening for client requests");
     //handles.push(tokio::spawn(check_if_dead(args)));
-    println!("Vibe-checker ready. Vibe check every {} secs", args.vibe_check_interval.as_secs());
+    //println!("Vibe-checker ready. Vibe check every {} secs", args.vibe_check_interval.as_secs());
     handles.push(tokio::spawn(check_updates(args)));
     println!("Client updater ready. Update every {} secs", args.update_client_interval.as_secs());
 
