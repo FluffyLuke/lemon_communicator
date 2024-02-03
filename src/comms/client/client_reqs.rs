@@ -3,7 +3,7 @@ use std::fmt;
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 
-use crate::comms::network::api::{GenericMessage, Status};
+use crate::comms::network::api::{DeadClientMessage, GenericMessage, Status};
 
 use super::{Client, RegisteredClient, KNOWN_CLIENTS};
 
@@ -31,27 +31,25 @@ pub async fn exit_network(client: &mut Client) -> std::io::Result<()> {
     Ok(())
 }
 
-// TODO FIX THIS 
-// pub async fn found_dead_client(client: &mut Client, request: Value) -> std::io::Result<()> {
-//     let parsed_request: Result<DeadClientMessage, serde_json::Error> = serde_json::from_str(&request.to_string());
-//     if let Err(_) = parsed_request {
-//         let error = "Wrong request";
-//         let response = GenericMessage::result(Status::Error, Some(error));
-//         let response = serde_json::to_string(&response).unwrap();
-//         client.stream.write_all(response.as_bytes()).await?;
-//     }
+pub async fn found_dead_client(client: &mut Client, request: Value) -> std::io::Result<()> {
+    let parsed_request: Result<DeadClientMessage, serde_json::Error> = serde_json::from_str(&request.to_string());
+    if let Err(_) = parsed_request {
+        let error = "Wrong request";
+        let response = GenericMessage::result(Status::Error, Some(error));
+        let response = serde_json::to_string(&response).unwrap();
+        client.stream.write_all(response.as_bytes()).await?;
+    }
 
-//     let unwrapped_request = parsed_request.unwrap();
-//     let result = vibe_check(&unwrapped_request.client).await;
-//     let
-//     if !result {
-//         let _result = KNOWN_CLIENTS.remove(&unwrapped_request.client).await;
-//     }
-//     let response = GenericMessage::result(Status::Ok, None);
-//     let response = serde_json::to_string(&response).unwrap();
-//     client.stream.write_all(response.as_bytes()).await?;
-//     Ok(())
-// }
+    let unwrapped_request = parsed_request.unwrap();
+    let result = KNOWN_CLIENTS.check_if_dead(&unwrapped_request.client).await;
+    if let Err(_err) = result {
+        let _result = KNOWN_CLIENTS.remove(&unwrapped_request.client).await;
+    }
+    let response = GenericMessage::result(Status::Ok, None);
+    let response = serde_json::to_string(&response).unwrap();
+    client.stream.write_all(response.as_bytes()).await?;
+    Ok(())
+}
 
 // TODO Change the way value is being unpacked, maybe into a struct 
 pub async fn join_network(
@@ -76,7 +74,7 @@ pub async fn join_network(
     let response = serde_json::to_string(&response).unwrap();
     let registered_client = RegisteredClient::from(&new_client);
     new_client.stream.write_all(response.as_bytes()).await.map_err(|err| JoinError::IOError(err))?;
-    KNOWN_CLIENTS.add(registered_client);
+    KNOWN_CLIENTS.add(registered_client).await;
     Ok(new_client)
 }
 

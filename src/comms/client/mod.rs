@@ -1,13 +1,14 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::vec::Vec;
+use std::vec::{self, Vec};
 
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use crate::comms::network::api::{GenericMessage, MessageType, Status};
 
 use super::network::NETWORK_CHANGES;
@@ -20,10 +21,18 @@ lazy_static!{
     pub static ref KNOWN_CLIENTS: KnownClients = KnownClients::create();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ServerActions {
-    UpdateClient(String),
+    UpdateClient(oneshot::Sender<bool>, String),
+    CheckIfDead(oneshot::Sender<bool>)
 }
+
+#[derive(Debug)]
+pub enum CheckIfDeadError {
+    NotFound,
+    IOError(std::io::Error),
+}
+
 
 
 pub struct KnownClients {
@@ -82,21 +91,65 @@ impl KnownClients {
         NetworkStateMessage::new(&self.to_weak().await)
     }
 
+    pub async fn remove_multiple<T>(&self, clients: &Vec<T>) -> bool
+    where T: GetId + GetWeak
+    {
+        let mut changes: Vec<NetworkChange> = vec![];
+        for client in clients.iter() {
+            let change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(client.weak())).unwrap();
+            changes.push(change);
+        }
+
+        {
+            let mut locked_clients = self.registered_clients.write().await;
+            locked_clients.retain(|x| clients.iter().find(|&y| y.get_id() == x.id).is_some());
+        }
+        NETWORK_CHANGES.add_multiple(changes).await;
+        true
+    }
+
     pub async fn update_clients(&self, updates: String) {
-        let action = ServerActions::UpdateClient(updates);
-        let mut dead_clients: Vec<RegisteredClient> = vec![];
+        // TODO change this tuple, so it will contain only ids, not whole clients.
+        // This will require changes in remove method
+        let mut receivers: Vec<(oneshot::Receiver<bool>, WeakClient)> = vec![]; 
         {
             let locked_clients = self.registered_clients.read().await;
             for client in locked_clients.iter() {
-                // TODO create a better way of removing clients
-                if let Err(_) = client.sender.send(action.clone()).await {
-                    dead_clients.push(client.clone())
-                }
+                let (tx, rx): (oneshot::Sender<bool>, oneshot::Receiver<bool>) = oneshot::channel();
+                // TODO do something about cloning the string possibly hundreds of times
+                client.sender.send(ServerActions::UpdateClient(tx, updates.clone())).await.unwrap();
+                receivers.push((rx, client.weak()));
             }
         }
-        for client in dead_clients.iter() {
-            self.remove(client).await;
+        for (rx, client) in receivers {
+            if !rx.await.unwrap() {
+                self.remove(&client);
+            }
         }
+    }
+    pub async fn check_if_exists<T>(&self, client: &T) -> bool
+    where T: GetId {
+        let id = client.get_id();
+        let locked_clients = self.registered_clients.read().await;
+        locked_clients.iter().any(|x| x.id == id)
+    }
+    // TODO make better error message is oneshot fails
+    pub async fn check_if_dead<T>(&self, client: &T) -> Result<bool, CheckIfDeadError>
+    where T: GetId {
+        let sender_copy;
+        {
+            let id = client.get_id();
+            let locked_clients = self.registered_clients.read().await;
+            let found_client = locked_clients.iter().find(|&x| x.id == id);
+            if found_client.is_none() {
+                return Err(CheckIfDeadError::NotFound);
+            }
+            sender_copy = found_client.unwrap().sender.clone();
+        }
+        let (tx, rx): (oneshot::Sender<bool>, oneshot::Receiver<bool>) = oneshot::channel();
+        sender_copy.send(ServerActions::CheckIfDead(tx)).await.unwrap();
+        let if_dead = rx.await.unwrap();
+        Ok(if_dead)
     }
 }
 
@@ -115,21 +168,21 @@ pub struct Client {
     pub id: u64,
     pub addr: std::net::SocketAddr,
     pub name: String,
-    stream: Box<tokio::io::BufReader<tokio::net::TcpStream>>,
-    sender: Sender<ServerActions>,
-    receiver: Box<Receiver<ServerActions>>
+    stream: tokio::io::BufReader<tokio::net::TcpStream>,
+    sender: mpsc::Sender<ServerActions>,
+    receiver: mpsc::Receiver<ServerActions>
 }
 
 impl Client {
     pub fn new(addr: std::net::SocketAddr, name: String, stream: BufReader<TcpStream>) -> Client {
-        let (tx, rx): (Sender<ServerActions>, Receiver<ServerActions>) = mpsc::channel(32);
+        let (tx, rx): (mpsc::Sender<ServerActions>, mpsc::Receiver<ServerActions>) = mpsc::channel(32);
         Client {
             id: KNOWN_CLIENTS.next_id(),
             addr,
             name,
-            stream: Box::new(stream),
+            stream: stream,
             sender: tx,
-            receiver: Box::new(rx),
+            receiver: rx,
         }
     }
     pub async fn vibe_check(&mut self) -> bool {
@@ -185,6 +238,12 @@ impl Client {
     }
 }
 
+impl GetId for u64 {
+    fn get_id(&self) -> u64 {
+        *self
+    }
+}
+
 impl GetId for Client {
     fn get_id(&self) -> u64 {
         self.id
@@ -210,7 +269,7 @@ pub struct RegisteredClient {
     pub id: u64,
     pub addr: std::net::SocketAddr,
     pub name: String,
-    pub sender: Sender<ServerActions>
+    pub sender: mpsc::Sender<ServerActions>
 }
 
 impl RegisteredClient {
