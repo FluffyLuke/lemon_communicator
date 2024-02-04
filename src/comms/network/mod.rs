@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use lazy_static::lazy_static;
-use tokio::{sync::Mutex, net::TcpStream, io::{BufReader, AsyncWriteExt, AsyncBufReadExt}};
+use tokio::sync::Mutex;
 
-use self::api::{NetworkChange, GenericMessage, Status, NetworkChangesMessage, MessageType};
+use self::api::{NetworkChange, NetworkChangesMessage};
 
-use super::client::Client;
 
 pub mod api;
 

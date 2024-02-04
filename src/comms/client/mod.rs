@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::vec::{self, Vec};
+
 
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
@@ -9,6 +9,7 @@ use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tokio::time;
 use crate::comms::network::api::{GenericMessage, MessageType, Status};
 
 use super::network::NETWORK_CHANGES;
@@ -24,7 +25,8 @@ lazy_static!{
 #[derive(Debug)]
 pub enum ServerActions {
     UpdateClient(oneshot::Sender<bool>, String),
-    CheckIfDead(oneshot::Sender<bool>)
+    CheckIfDead(oneshot::Sender<bool>),
+    Disconnect
 }
 
 #[derive(Debug)]
@@ -82,6 +84,8 @@ impl KnownClients {
                 return false;
             }
             change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(client.weak())).unwrap();
+            let found_client = locked_clients.iter().find(|x: &&RegisteredClient| x.id == client.get_id()).unwrap();
+            found_client.sender.send(ServerActions::Disconnect).await.unwrap();
             locked_clients.remove(position.unwrap());
         }
         NETWORK_CHANGES.add(change).await;
@@ -91,18 +95,23 @@ impl KnownClients {
         NetworkStateMessage::new(&self.to_weak().await)
     }
 
-    pub async fn remove_multiple<T>(&self, clients: &Vec<T>) -> bool
+    pub async fn remove_multiple<T>(&self, dead_clients: &Vec<T>) -> bool
     where T: GetId + GetWeak
     {
         let mut changes: Vec<NetworkChange> = vec![];
-        for client in clients.iter() {
+        for client in dead_clients.iter() {
             let change = NetworkChange::new(NetworkChangeType::ExitNetwork, Some(client.weak())).unwrap();
             changes.push(change);
         }
 
         {
             let mut locked_clients = self.registered_clients.write().await;
-            locked_clients.retain(|x| clients.iter().find(|&y| y.get_id() == x.id).is_some());
+            for client in locked_clients.iter() {
+                if dead_clients.iter().find(|&x| x.get_id() == client.id).is_some() {
+                    client.sender.send(ServerActions::Disconnect).await.unwrap();
+                }
+            }
+            locked_clients.retain(|x| dead_clients.iter().find(|&y| y.get_id() == x.id).is_some());
         }
         NETWORK_CHANGES.add_multiple(changes).await;
         true
@@ -151,6 +160,26 @@ impl KnownClients {
         let if_dead = rx.await.unwrap();
         Ok(if_dead)
     }
+    // Like check_if_dead, but checks all clients
+    pub async fn vibe_check(&self) {
+        let mut sender_copies = vec![];
+        let mut dead_clients = vec![];
+        {
+            let locked_clients = self.registered_clients.read().await;
+
+            for client in locked_clients.iter() {
+                let (tx, rx): (oneshot::Sender<bool>, oneshot::Receiver<bool>) = oneshot::channel();
+                client.sender.send(ServerActions::CheckIfDead(tx)).await.unwrap();
+                sender_copies.push((rx, client.weak()));       
+            };
+        }
+        for (receiver, weak_client) in sender_copies {
+            if receiver.await.unwrap() {
+                dead_clients.push(weak_client)
+            }
+        }
+        self.remove_multiple(&dead_clients).await;
+    }
 }
 
 pub trait GetId {
@@ -187,6 +216,12 @@ impl Client {
     }
     // TODO make it wait n secs before aborting
     pub async fn vibe_check(&mut self) -> bool {
+        tokio::select! {
+            if_alive = self.check_if_dead() => if_alive,
+            _ = time::sleep(time::Duration::from_secs(3)) => false
+        }
+    }
+    async fn check_if_dead(&mut self) -> bool{
         let mut buf = String::new();
         let response = GenericMessage::new(MessageType::VibeCheck, Status::Ok, None);
         let response = serde_json::to_string(&response).unwrap();

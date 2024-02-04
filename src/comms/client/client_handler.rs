@@ -1,10 +1,10 @@
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::TcpStream};
+use tokio::{io::{AsyncBufReadExt, BufReader}, net::TcpStream};
 
-use crate::comms::{client::client_reqs, network::api::DeadClientMessage};
+use crate::comms::client::client_reqs;
 use crate::comms::network::api::{get_request_type_str, MessageType};
 use crate::comms::wrong_request;
 
-use super::{Client, ServerActions, WeakClient};
+use super::{Client, ServerActions};
 
 pub async fn client_handler(mut client: Client) {
     let mut buffer = String::new();
@@ -42,7 +42,13 @@ pub async fn client_handler(mut client: Client) {
                     eprintln!("Error while serving a registered client: {}", err);
                 }
             }
-            val = client.receiver.recv() => server_request(&mut client, val.unwrap()).await
+            val = client.receiver.recv() => {
+                let if_dead = server_request(&mut client, val.unwrap()).await;
+                // If server sends ServerActions::Disconnect, then break the loop and stop the task
+                if if_dead {
+                    break
+                }
+            }
         }
         buffer.clear();
     }
@@ -54,24 +60,23 @@ async fn next_request(stream: &mut BufReader<TcpStream>, buffer: &mut String) ->
 }
 
 // TODO if fails, make it check if client is alive
-async fn server_request(client: &mut Client, request: ServerActions) {
+async fn server_request(client: &mut Client, request: ServerActions) -> bool{
     match request {
         ServerActions::UpdateClient(sender, updates) => {
             let result = client.update_client(&updates).await;
             if let Err(err) = result {
                 eprintln!("Error while updating a registered client: {}", err);
                 sender.send(false).unwrap();
-                return
+                return true
             }
             sender.send(true).unwrap();
+            true
         }
         ServerActions::CheckIfDead(sender) => {
             let if_dead = client.vibe_check().await;
-            if if_dead {
-                sender.send(false).unwrap();
-                return;
-            }
-            sender.send(true).unwrap();
+            sender.send(!if_dead).unwrap();
+            true
         }
+        ServerActions::Disconnect => false
     }
 }

@@ -42,6 +42,14 @@ pub async fn found_dead_client(client: &mut Client, request: Value) -> std::io::
     }
 
     let unwrapped_request = parsed_request.unwrap();
+
+    if unwrapped_request.client.id == client.id {
+        let response = GenericMessage::result(Status::Error, Some("ID provided is yours"));
+    let response = serde_json::to_string(&response).unwrap();
+        client.stream.write_all(response.as_bytes()).await?;
+        return Ok(());
+    }
+    
     let result = KNOWN_CLIENTS.check_if_dead(&unwrapped_request.client).await;
     if let Err(_err) = result {
         let _result = KNOWN_CLIENTS.remove(&unwrapped_request.client).await;
