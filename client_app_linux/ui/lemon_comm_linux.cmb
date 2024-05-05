@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<!DOCTYPE cambalache-project SYSTEM "cambalache-project.dtd">
+<cambalache-project version="0.9.0" target_tk="gtk-4.0">
+  <ui>
+	(1,None,"linux_client.ui","linux_client.ui",None,None,None,None,None,None)
+  </ui>
+  <object>
+	(1,1,"GtkWindow","window",None,None,None,None,None),
+	(1,2,"GtkButton","button1",1,None,None,None,-1)
+  </object>
+  <object_property>
+	(1,2,"GtkAccessible","accessible-role","presentation",None,None,None,None,None),
+	(1,2,"GtkButton","label","BUTTON",None,None,None,None,None)
+  </object_property>
+  <object_signal>
+	(1,1,2,"GtkButton","clicked","on_button1_clicked",None,None,None,None,None)
+  </object_signal>
+</cambalache-project>
