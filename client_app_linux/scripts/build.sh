@@ -4,6 +4,8 @@ PATHTOFILES="$SCRIPTPATH/../src"
 PATHTOUI="$SCRIPTPATH/../src/ui"
 PATHTOTARGET="$SCRIPTPATH/../target"
 
+mkdir -p ${PATHTOTARGET}
+
 files=()
 files+=("$PATHTOFILES/main.c")
 
