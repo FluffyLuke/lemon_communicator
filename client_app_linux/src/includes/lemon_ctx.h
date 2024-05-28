@@ -1,17 +1,15 @@
 #ifndef __LEMON_CTX
 #define __LEMON_CTX
 
-#include <GLFW/glfw3.h>
-#include <stdbool.h> 
-
+#include <stdbool.h>
 #include <uv.h>
+#include <GLFW/glfw3.h>
 #include "utils.h"
-
-#include "../imgui/imgui.h"
-
 
 #define NAME_LENGHT 32
 #define PASSWORD_LENGHT 32
+
+
 
 typedef struct lemon_client_ctx {
     uv_rwlock_t lock;

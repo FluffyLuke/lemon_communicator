@@ -16,7 +16,7 @@
 
 
 EXE = target/lemon_comm
-IMGUI_DIR = imgui
+IMGUI_DIR = ../libs/imgui
 SOURCES_DIR = src
 TARGET_DIR = target
 SOURCES = $(SOURCES_DIR)/main.cpp

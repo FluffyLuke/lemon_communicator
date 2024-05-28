@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <imgui/imgui.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -9,22 +8,16 @@
 #include <stdio.h>
 
 #include <uv.h>
+#include "includes/utils.h"
 #include "includes/lemon_ctx.h"
 #include "includes/lemon_gui.h"
-#include "includes/utils.h"
+
+#include "../../libs/imgui/imgui.h"
+#include "../../libs/imgui/backends/imgui_impl_glfw.h"
+#include "../../libs/imgui/backends/imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
 
 #define DEMO_POPUP_ID "demo_popup"
-
-void demo_popup(lemon_app_ctx* app_ctx) {
-    if(!ImGui::BeginPopupModal(DEMO_POPUP_ID)) {
-        return;
-    }
-
-    ImGui::Text("This is demo popup!");    
-    if (ImGui::Button("Close"))
-        ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-}
 
 void render_friends_window(lemon_app_ctx* ctx, ImVec2 size, ImVec2 position) {
     lemon_gui_ctx* g_ctx = ctx->gui_ctx;
@@ -85,7 +78,7 @@ void render_options_window(lemon_app_ctx* ctx, ImVec2 size, ImVec2 position) {
     ImGui::SameLine();
     if(ImGui::Button("Display demo popup"))
             ImGui::OpenPopup(DEMO_POPUP_ID);
-        if(ImGui::BeginPopupModal(DEMO_POPUP_ID)) {
+    if(ImGui::BeginPopupModal(DEMO_POPUP_ID)) {
         ImGui::Text("This is demo popup!");    
         if (ImGui::Button("Close"))
             ImGui::CloseCurrentPopup();
@@ -145,9 +138,6 @@ void ui_main(uv_idle_t* handle) {
     position = ImVec2(options_window_pos_x, options_window_pos_y);
     size = ImVec2(options_window_size_x, options_window_size_y);
     render_options_window(ctx, size, position);
-
-    //Popups
-    demo_popup(ctx);
 
     // Demo window for guidance
     if(g_ctx->ifDemoWindow) {

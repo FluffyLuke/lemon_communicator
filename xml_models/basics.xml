@@ -1,0 +1,27 @@
+<!-- Common atributes for all xmls-->
+<root>
+    <!-- 
+        STATUSES:
+        - OK
+        - ERR
+    -->
+    <status></status>
+    <!-- Describes the error, empty if status is OK-->
+    <error></error>
+</root>
+
+<!-- Server response -->
+<root>
+    <status></status>
+    <error></error>
+</root>
+
+
+<!-- Create user -->
+<root>
+    <status></status>
+    <error></error>
+    
+    <name></name>
+    <password></password>
+</root>
