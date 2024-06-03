@@ -11,7 +11,7 @@ void init_client(client_t* client, uv_tcp_t* stream) {
     uv_tcp_getpeername(stream, (struct sockaddr*)&ipv4_addr, &namelen);
 
     client->addr = ipv4_addr;
-    client->stream = (uv_stream_t*) stream;
+    client->stream = go(uv_stream_t*) stream;
     time(&client->last_time);
 }
 
