@@ -1,10 +1,8 @@
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <stdint.h>
 #include <pugixml.hpp>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <string.h>
@@ -17,29 +15,34 @@
 
 using namespace pugi;
 
-message create_response(message_status status, char* err) {
-    message m = {
-        .type = RESPONSE,
-        .status = status,
-        .err = err,
-    };
-
-    if(err == NULL) {
-        m.err = NULL;
-    } else {
-        m.err = (char*)malloc((strlen(err)+1)*sizeof(char));
-        strcpy(m.err, err);
+void init_message(message_t* m, message_status status, const char* err) {
+    m->type = RESPONSE;
+    m->status = status;
+    m->err = NULL;
+    if(err != NULL) {
+        m->err = (char*)malloc((strlen(err)+1)*sizeof(char));
+        strcpy(m->err, err);
     }
-
-    return m;
 }
 
-void destroy_response(message* m) {
-    free(m->err);
+void destroy_message(message_t* m) {
+    if(m->err != NULL) {
+        free(m->err);
+    }
+    switch (m->type) {
+        case LOGIN: {
+            free(m->data.login.key);
+            free(m->data.login.password);
+            break;
+        }
+        default: {
+            break;
+        }
+    }
 }
 
-char* deserialize_response(message* response) {
-    if(response->type != RESPONSE) {
+char* serialize_message(message_t* m) {
+    if(m->type != RESPONSE) {
         return NULL;
     }
 
@@ -47,14 +50,27 @@ char* deserialize_response(message* response) {
     pugi::xml_node root = doc.append_child("root");
     root.append_child("type")
         .text()
-        .set(MESSAGE_TYPE_NAME[response->type]);
+        .set(MESSAGE_TYPE_NAME[m->type]);
     root.append_child("status")
         .text()
-        .set(MESSAGE_STATUS_NAME[response->status]);
+        .set(MESSAGE_STATUS_NAME[m->status]);
 
     pugi::xml_node err = root.append_child("err");
-    if (response->err != NULL) {
-        err.text().set(response->err);
+    if (m->err != NULL) {
+        err.text().set(m->err);
+    }
+
+    switch(m->type) {
+        case LOGIN: {
+            root.append_child("key")
+                .text()
+                .set(m->data.login.key);
+            root.append_child("password")
+                .text()
+                .set(m->data.login.password);
+        }
+        default:
+            break;
     }
 
     std::stringstream ss;
@@ -62,34 +78,41 @@ char* deserialize_response(message* response) {
     std::string xmlString = ss.str();
     const char* xml_str = xmlString.c_str();
     size_t len = strlen(xml_str);
-    char* deserialized_response = (char*)malloc((len+1) * sizeof(char));
-    strcpy(deserialized_response, xml_str);
-    return deserialized_response;
+    char* deserialized_message = (char*)malloc((len+1) * sizeof(char));
+    strcpy(deserialized_message, xml_str);
+
+    return deserialized_message;
 }
 
-bool serialize_response(message* message, const char* raw_xml) {
+void deserialize_message(message_t* message, const char* raw_xml) {
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_string(raw_xml);
+    printf("1!\n");
     if(!result) {
-        return false;
+        message->type = PARSE_ERR;
+        return;
     }
     pugi::xml_node root = doc.child("root");
     pugi::xml_node type = root.child(TYPE_NODE);
     pugi::xml_node status = root.child(STATUS_NODE);
     pugi::xml_node err = root.child(ERROR_NODE);
 
+    printf("2!\n");
     if(!type || !status || !err ){
-        return false;
+        message->type = PARSE_ERR;
+        return;
     }
 
+    printf("Parsing message!\n");
     const char_t* type_value = type.text().as_string();
     if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[0])) {
         message->type = RESPONSE;
     } else if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[1])) {
-        message->type = USER_REGISTRATION;
+        message->type = LOGIN;
     } else {
-        printf("DUPSKO");
-        return false;
+        fprintf(stderr, "Cannot parse message!\n");
+        message->type = PARSE_ERR;
+        return;
     }
 
     const char_t* status_value = status.text().as_string();
@@ -98,7 +121,9 @@ bool serialize_response(message* message, const char* raw_xml) {
     } else if(IF_EQUALS(status_value, MESSAGE_STATUS_NAME[1])) {
         message->status = ERR;
     } else {
-        return false;
+        fprintf(stderr, "Cannot parse message!\n");
+        message->type = PARSE_ERR;
+        return;
     }
 
     const char_t* err_value = err.text().as_string();
@@ -106,5 +131,27 @@ bool serialize_response(message* message, const char* raw_xml) {
         message->err = (char*)malloc((strlen(err_value)+1)*sizeof(char));
         strcpy(message->err, err_value);
     }
-    return true;
+
+    switch(message->type) {
+        case LOGIN: {
+            pugi::xml_node key = doc.child("key");
+            pugi::xml_node password = doc.child("password");
+            if(!key || !password) {
+                fprintf(stderr, "Cannot parse login message!");
+                message->type = PARSE_ERR;
+                return;
+            }
+            const char_t* key_value = key.text().as_string();
+            const char_t* password_value = password.text().as_string();
+
+            message->data.login.key = (char*)malloc((strlen(key_value)+1)*sizeof(char));
+            strcpy(message->data.login.key, key_value);
+            message->data.login.key = (char*)malloc((strlen(password_value)+1)*sizeof(char));
+            strcpy(message->data.login.key, password_value);
+            break;
+        }
+        default: {
+            break;
+        }
+    }
 }

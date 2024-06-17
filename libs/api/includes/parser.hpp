@@ -1,28 +1,24 @@
-#include <stdint.h>
+#ifndef __parser
+#define __parser
 
-#define NAME_LENGHT 32
-#define PASSWORD_LENGHT 32
+#include <stdint.h>
 
 #define TYPE_NODE "type"
 #define STATUS_NODE "status"
 #define ERROR_NODE "error"
 
-struct client {
-    int8_t name[NAME_LENGHT];
-    int8_t password[NAME_LENGHT];
-};
-
-typedef enum message_type {
-    RESPONSE, // Basic response without body.
-    USER_REGISTRATION
+typedef enum {
+    RESPONSE, // Basic response without body
+    LOGIN,
+    PARSE_ERR
 } message_type;
 
 static const char* MESSAGE_TYPE_NAME[] = {
     "response",
-    "user_registration"
+    "login"
 };
 
-typedef enum message_status {
+typedef enum {
     OK,
     ERR
 } message_status;
@@ -32,21 +28,25 @@ static const char* MESSAGE_STATUS_NAME[] = {
     "err"
 };
 
-typedef struct message {
+typedef struct {
+    char* key;
+    char* password;
+} login_data_t;
+
+typedef struct {
     message_type type;
     message_status status;
     char* err;
 
-    void* data;
-} message;
+    union {
+        login_data_t login;
+    } data;
+} message_t;
 
-typedef struct register_user_data {
-    const char* name[NAME_LENGHT];
-    const char* password[PASSWORD_LENGHT];
-} register_user_data;
+void init_message(message_t* m, message_status status, const char* err);
+void destroy_message(message_t* m);
 
-message create_response(message_status status, char* err);
-void destroy_response(message* m);
+char* serialize_message(message_t* m);
+void deserialize_message(message_t* message, const char* raw_xml);
 
-char* deserialize_response(message* response);
-bool serialize_response(message* message, const char* raw_xml);
+#endif

@@ -1,0 +1,36 @@
+<!-- Common atributes for all xmls-->
+<root>
+    <!--
+        TYPES:
+        - RESPONSE
+        - PARSE ERROR (When server was unable to parse message from client)
+    -->
+    <type><type>
+    <!-- 
+        STATUSES:
+        - OK
+        - ERR
+    -->
+    <status></status>
+    <!-- Describes the error, empty if status is OK-->
+    <error></error>
+</root>
+
+<!-- Server response -->
+<root>
+    <type><type>
+    <status></status>
+    <error></error>
+</root>
+
+<!-- LOGIN -->
+<root>
+    <type><type>
+    <status></status>
+    <error></error>
+
+    <!-- Client needs to provide their key/certificate and a password. -->
+    <!-- While password is used only in logging, key needs to be supplied with every request-->
+    <key></key>
+    <password></password>
+</root>
