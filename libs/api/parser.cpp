@@ -15,7 +15,7 @@
 
 using namespace pugi;
 
-void init_message(message_t* m, message_status status, const char* err) {
+void init_message(message_t* m, message_type type, message_status status, const char* err) {
     m->type = RESPONSE;
     m->status = status;
     m->err = NULL;
@@ -34,6 +34,9 @@ void destroy_message(message_t* m) {
             free(m->data.login.key);
             free(m->data.login.password);
             break;
+        }
+        case LOGIN_RETURN: {
+            free(m->data.login_r.token);
         }
         default: {
             break;
@@ -69,6 +72,11 @@ char* serialize_message(message_t* m) {
                 .text()
                 .set(m->data.login.password);
         }
+        case LOGIN_RETURN: {
+            root.append_child("token")
+                .text()
+                .set(m->data.login_r.token);
+        }
         default:
             break;
     }
@@ -87,8 +95,8 @@ char* serialize_message(message_t* m) {
 void deserialize_message(message_t* message, const char* raw_xml) {
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_string(raw_xml);
-    printf("1!\n");
     if(!result) {
+        fprintf(stderr, "Cannot parse message: invalid xml\n");
         message->type = PARSE_ERR;
         return;
     }
@@ -97,7 +105,6 @@ void deserialize_message(message_t* message, const char* raw_xml) {
     pugi::xml_node status = root.child(STATUS_NODE);
     pugi::xml_node err = root.child(ERROR_NODE);
 
-    printf("2!\n");
     if(!type || !status || !err ){
         message->type = PARSE_ERR;
         return;
@@ -105,12 +112,17 @@ void deserialize_message(message_t* message, const char* raw_xml) {
 
     printf("Parsing message!\n");
     const char_t* type_value = type.text().as_string();
+
     if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[0])) {
         message->type = RESPONSE;
     } else if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[1])) {
+        message->type = PARSE_ERR;
+    } else if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[2])) {
         message->type = LOGIN;
+    } else if(IF_EQUALS(type_value, MESSAGE_TYPE_NAME[3])) {
+        message->type = LOGIN_RETURN;
     } else {
-        fprintf(stderr, "Cannot parse message!\n");
+        fprintf(stderr, "Cannot parse message: wrong type!\n");
         message->type = PARSE_ERR;
         return;
     }
@@ -121,7 +133,7 @@ void deserialize_message(message_t* message, const char* raw_xml) {
     } else if(IF_EQUALS(status_value, MESSAGE_STATUS_NAME[1])) {
         message->status = ERR;
     } else {
-        fprintf(stderr, "Cannot parse message!\n");
+        fprintf(stderr, "Cannot parse message: wrong status!\n");
         message->type = PARSE_ERR;
         return;
     }
@@ -134,10 +146,10 @@ void deserialize_message(message_t* message, const char* raw_xml) {
 
     switch(message->type) {
         case LOGIN: {
-            pugi::xml_node key = doc.child("key");
-            pugi::xml_node password = doc.child("password");
+            pugi::xml_node key = root.child(KEY_NODE);
+            pugi::xml_node password = root.child(PASSWORD_NODE);
             if(!key || !password) {
-                fprintf(stderr, "Cannot parse login message!");
+                fprintf(stderr, "Cannot parse login message!\n");
                 message->type = PARSE_ERR;
                 return;
             }
@@ -148,6 +160,18 @@ void deserialize_message(message_t* message, const char* raw_xml) {
             strcpy(message->data.login.key, key_value);
             message->data.login.key = (char*)malloc((strlen(password_value)+1)*sizeof(char));
             strcpy(message->data.login.key, password_value);
+            break;
+        }
+        case LOGIN_RETURN: {
+            pugi::xml_node token = root.child(TOKEN_NODE);
+            if(!token ) {
+                fprintf(stderr, "Cannot parse returned login message!\n");
+                message->type = PARSE_ERR;
+                return;
+            }
+            const char_t* token_value = token.text().as_string();
+            message->data.login.key = (char*)malloc((strlen(token_value)+1)*sizeof(char));
+            strcpy(message->data.login_r.token, token_value);
             break;
         }
         default: {

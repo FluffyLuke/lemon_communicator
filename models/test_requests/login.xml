@@ -1,0 +1,8 @@
+<root>
+    <type>login</type>
+    <status>ok</status>
+    <error></error>
+
+    <key>SecretKey</key>
+    <password>Piernik</password>
+</root>

@@ -10,6 +10,8 @@
         STATUSES:
         - OK
         - ERR
+        - LOGIN
+        - LOGIN_RETURN
     -->
     <status></status>
     <!-- Describes the error, empty if status is OK-->

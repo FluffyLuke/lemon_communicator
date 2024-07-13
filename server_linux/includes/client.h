@@ -8,9 +8,11 @@
 #include <uv/unix.h>
 #include "../../libs/vec/src/vec.h"
 
-#define PASSWORD_LEN 50
-#define NAME_LEN 50
-#define EMAIL_LEN 255
+
+// Since utf-8, need to multiply by 4
+#define PASSWORD_LEN 50*4
+#define NAME_LEN 50*4
+#define EMAIL_LEN 256*4
 
 typedef struct {
     int64_t id;
@@ -30,11 +32,11 @@ typedef struct {
 void init_client(client_t* client, uv_tcp_t* stream);
 void destroy_client(client_t* client);
 
-typedef struct {
-    client_t* ptr;
-    size_t len;
-    size_t used_len;
-} client_table_t;
+// typedef struct {
+//     client_t* ptr;
+//     size_t len;
+//     size_t used_len;
+// } client_table_t;
 
 typedef vec_t(client_t*) client_vec_t;
 

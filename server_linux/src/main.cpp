@@ -175,27 +175,31 @@ void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf
         m->err = NULL;
         deserialize_message(m, buf->base);
 #ifdef __EXTRA_INFO
-        printf("Got new message");
+        printf("Got new message\n");
         printf("Whole message: \n%s\n", buf->base);
+        printf("Message type: %d\n", m->type);
 #endif
         switch(m->type) {
-            case PARSE_ERR:
-                // Inform client about wrong request
-                basic_res(client_stream, ERR, "Wrong request");
-                break;
             case RESPONSE:
                 // Client should not be one sending responses
                 // Just ping it back
-                ping_back(client_stream, m);
+                ping_back(cc->ctx, client, m);
                 break;
             case LOGIN:
+#ifdef  __EXTRA_INFO
+                printf("Logging user...");
+#endif
                 login_user(cc->ctx, client, m);
+                break;
+            default:
+                // Inform client about wrong request
+                basic_res(cc->ctx, client, ERR, "Wrong request");
                 break;
             }
         destroy_message(m);
     } else if(nread == 0) {
         // No data was sent to the server
-        basic_res(client_stream, ERR, "Wrong request");
+        basic_res(cc->ctx, client, ERR, "Wrong request");
     } else {
         // EOF file reached - closing connection
         printf("Client disconected\n");

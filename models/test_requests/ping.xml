@@ -2,5 +2,5 @@
 <root>
     <type>response</type>
     <status>ok</status>
-    <error></error>
+    <error>Random error, even if status is okay</error>
 </root>

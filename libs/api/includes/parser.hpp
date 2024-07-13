@@ -10,17 +10,20 @@
 typedef enum {
     RESPONSE, // Basic response without body
     LOGIN,
-    PARSE_ERR
+    LOGIN_RETURN,
+    PARSE_ERR,
 } message_type;
 
 static const char* MESSAGE_TYPE_NAME[] = {
     "response",
-    "login"
+    "parse_err",
+    "login",
+    "login_return",
 };
 
 typedef enum {
     OK,
-    ERR
+    ERR,
 } message_status;
 
 static const char* MESSAGE_STATUS_NAME[] = {
@@ -33,6 +36,16 @@ typedef struct {
     char* password;
 } login_data_t;
 
+#define KEY_NODE "key"
+#define PASSWORD_NODE "password"
+
+// Login return data
+typedef struct {
+    char* token;
+} login_r_data_t;
+
+#define TOKEN_NODE "token"
+
 typedef struct {
     message_type type;
     message_status status;
@@ -40,10 +53,11 @@ typedef struct {
 
     union {
         login_data_t login;
+        login_r_data_t login_r;
     } data;
 } message_t;
 
-void init_message(message_t* m, message_status status, const char* err);
+void init_message(message_t* m, message_type, message_status status, const char* err);
 void destroy_message(message_t* m);
 
 char* serialize_message(message_t* m);
