@@ -3,5 +3,8 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 PATHTOFILES="$SCRIPTPATH/../src/"
 PATHTOTARGET="$SCRIPTPATH/../target"
 
-${SCRIPTPATH}/build.sh
-${PATHTOTARGET}/server $@
+if ${SCRIPTPATH}/build.sh ; then
+    ${PATHTOTARGET}/server $@
+else
+    echo "Cannot run program!"
+fi

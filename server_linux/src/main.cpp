@@ -187,7 +187,7 @@ void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf
                 break;
             case LOGIN:
 #ifdef  __EXTRA_INFO
-                printf("Logging user...");
+                printf("Logging user...\n");
 #endif
                 login_user(cc->ctx, client, m);
                 break;

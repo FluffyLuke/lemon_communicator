@@ -12,7 +12,6 @@ void send(client_t* c, message_t* m) {
     uv_write_t* req = (uv_write_t*)malloc(sizeof(uv_write_t));
     uv_buf_t wrbuf = uv_buf_init(ser_mes, strlen(ser_mes));
     uv_write(req, c->stream, &wrbuf, 1, NULL);
-
     free(req);
     free(ser_mes);
 }
@@ -48,12 +47,16 @@ void ping_back(server_ctx* ctx, client_t* client, message_t* client_mes) {
 void login_user(server_ctx* ctx, client_t* client, message_t* client_mes) {
     db_driver_t* db = ctx->database;
     message_t res;
-    printf("--1--\n");
+
     // db.login will init the message
-    bool result = db->login(db, client_mes->data.login.key, client_mes->data.login.password, &res);
-    printf("--2--\n");
+    char* result = db->login(db, client_mes->data.login.key, client_mes->data.login.password);
+
+    if(result != NULL) {
+        init_message(&res, LOGIN_RETURN, OK, NULL);
+        res.data.login_r.token = result;
+    } else {
+        init_message(&res, LOGIN_RETURN, ERR, "Cannot login client");
+    }
     send(client, &res);
-     printf("--3--\n");
     destroy_message(&res);
-     printf("--4--\n");
 }

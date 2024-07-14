@@ -16,7 +16,7 @@
 using namespace pugi;
 
 void init_message(message_t* m, message_type type, message_status status, const char* err) {
-    m->type = RESPONSE;
+    m->type = type;
     m->status = status;
     m->err = NULL;
     if(err != NULL) {
@@ -45,9 +45,9 @@ void destroy_message(message_t* m) {
 }
 
 char* serialize_message(message_t* m) {
-    if(m->type != RESPONSE) {
-        return NULL;
-    }
+    // if(m->type != RESPONSE) {
+    //     return NULL;
+    // }
 
     pugi::xml_document doc;
     pugi::xml_node root = doc.append_child("root");
@@ -158,8 +158,8 @@ void deserialize_message(message_t* message, const char* raw_xml) {
 
             message->data.login.key = (char*)malloc((strlen(key_value)+1)*sizeof(char));
             strcpy(message->data.login.key, key_value);
-            message->data.login.key = (char*)malloc((strlen(password_value)+1)*sizeof(char));
-            strcpy(message->data.login.key, password_value);
+            message->data.login.password = (char*)malloc((strlen(password_value)+1)*sizeof(char));
+            strcpy(message->data.login.password, password_value);
             break;
         }
         case LOGIN_RETURN: {

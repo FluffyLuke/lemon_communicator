@@ -25,7 +25,7 @@ typedef struct db_driver_t {
     void* conn;
     db_driver_ctx database_ctx;
     client_t* (*get_all_clients)(struct db_driver_t*);
-    bool (*login)(struct db_driver_t* db, char* key, char* password, message_t* mes);
+    char* (*login)(struct db_driver_t* db, char* key, char* password);
 } db_driver_t;
 
 int32_t init_database(db_driver_ctx db_ctx, db_driver_t* db);

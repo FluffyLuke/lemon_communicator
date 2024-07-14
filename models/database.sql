@@ -19,6 +19,15 @@ create table credentials(
     PRIMARY KEY (id)
 );
 
+create table tokens(
+    id BIGINT unsigned NOT NULL AUTO_INCREMENT,
+    user_id BIGINT unsigned NOT NULL,
+    hashed_token BINARY(255) NOT NULL,
+    expiration_date DATETIME NOT NULL,
+
+    PRIMARY KEY (id)
+);
+
 create OR REPLACE USER admin@localhost 
 IDENTIFIED BY 'admin123';
 

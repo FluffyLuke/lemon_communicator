@@ -14,4 +14,4 @@ files+=("$PATHTOFILES/client.c")
 files+=("$PATHTOLIBS/api/parser.cpp")
 files+=("$PATHTOLIBS/vec/src/vec.c")
 
-g++ ${files[@]} -o ${PATHTOTARGET}/server `pkg-config --libs libuv pugixml` $(mariadb_config --include --libs)
+g++ ${files[@]} -o ${PATHTOTARGET}/server `pkg-config --libs libuv pugixml openssl` $(mariadb_config --include --libs)
