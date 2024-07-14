@@ -9,9 +9,62 @@
 #include "../includes/client.h"
 #include "../includes/database.h"
 #include "../../libs/api/includes/parser.hpp"
-#include <openssl/sha.h>
+#include <openssl/sha.h> 
 
 #define TOKEN_SIZE 32
+
+#define TM_GREATER 1
+#define TM_EQUAL 0
+#define TM_SMALLER -1
+
+
+struct tm* get_current_tm() {
+    time_t timestamp;
+    struct tm* tm;
+
+    time(&timestamp);
+    return gmtime(&timestamp);
+}
+
+void mysql_to_tm(MYSQL_TIME* mt, struct tm* tm) {
+    tm->tm_year = mt->year;
+    tm->tm_mon = mt->month;
+    tm->tm_mday = mt->day;
+    tm->tm_hour = mt->hour;
+    tm->tm_min = mt->minute;
+    tm->tm_sec = mt->second;
+};
+
+void tm_to_mysql(struct tm* tm, MYSQL_TIME* mt) {
+    mt->year = tm->tm_year;
+    mt->month = tm->tm_mon;
+    mt->day = tm->tm_mday;
+    mt->hour = tm->tm_hour;
+    mt->minute = tm->tm_min;
+    mt->second = tm->tm_sec;
+}
+
+// Compares tm1 to tm2
+int8_t compare_tm(struct tm* tm1, struct tm* tm2) {
+    // Linus Torvalds wouldn't be happy
+    if(tm1->tm_year > tm2->tm_year)
+        if(tm1->tm_mon > tm2->tm_mon)
+            if(tm1->tm_mday > tm2->tm_mday)
+                if(tm1->tm_hour > tm2->tm_hour)
+                    if(tm1->tm_min > tm2->tm_min)
+                        if(tm1->tm_sec > tm2->tm_sec)
+                            return TM_GREATER;
+
+    if(tm1->tm_year > tm2->tm_year)
+        if(tm1->tm_mon > tm2->tm_mon)
+            if(tm1->tm_mday > tm2->tm_mday)
+                if(tm1->tm_hour > tm2->tm_hour)
+                    if(tm1->tm_min > tm2->tm_min)
+                        if(tm1->tm_sec > tm2->tm_sec)
+                            return TM_SMALLER;
+                    
+    return TM_EQUAL;
+}
 
 char* rand_string(size_t length) {
     static char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.-#'?!";        
@@ -53,11 +106,11 @@ client_t* mariadb_get_all_clients(db_driver_t* db) {
 }
 
 // Remember: database lock must be acquired by the calling function
-bool mariadb_insert_token(uint64_t client_id, char* token, db_driver_t* db) {
+bool mariadb_insert_token(db_driver_t* db, uint64_t client_id, char* token) {
     if(strlen(token) > SHA256_DIGEST_LENGTH) {
         return false;
     }
-    char* query = "INSERT INTO tokens (user_id, hashed_token, expiration_date) values (?, ?, ?)";
+    char* query = "INSERT INTO tokens (client_id, hashed_token, expiration_date) values (?, ?, ?)";
 
     MYSQL_STMT* stmt = mysql_stmt_init((MYSQL*)db->conn);
     if (mysql_stmt_prepare(stmt, query, strlen(query)+1) != 0) {
@@ -66,21 +119,13 @@ bool mariadb_insert_token(uint64_t client_id, char* token, db_driver_t* db) {
     }
 
     MYSQL_TIME expiration_dt;
-    time_t timestamp;
     struct tm* tm;
+    tm = get_current_tm();
 
-    time(&timestamp);
-    tm = gmtime(&timestamp);
     tm->tm_mday += 1;
     mktime(tm);
  
-    expiration_dt.year = tm->tm_year;
-    expiration_dt.month = tm->tm_mon;
-    expiration_dt.day = tm->tm_mday;
-    expiration_dt.hour = tm->tm_hour;
-    expiration_dt.minute = tm->tm_min;
-    expiration_dt.second = tm->tm_sec;
-
+    tm_to_mysql(tm, &expiration_dt);
 
     MYSQL_BIND args[3];
     memset(args, 0, sizeof(args));
@@ -88,23 +133,104 @@ bool mariadb_insert_token(uint64_t client_id, char* token, db_driver_t* db) {
     args[0].buffer = &client_id;
     args[0].is_unsigned = 1;
 
-    args[1].buffer_type = MYSQL_TYPE_BIT;
+    args[1].buffer_type = MYSQL_TYPE_STRING;
     args[1].buffer = token;
     args[1].buffer_length = strlen(token)+1;
 
     args[2].buffer_type = MYSQL_TYPE_DATETIME;
     args[2].buffer = &expiration_dt;
-    args[2].is_null = 0; // Not null
-    mysql_stmt_bind_param(stmt, args);
-
-    if (mysql_stmt_execute(stmt) != 0) {
-        fprintf(stderr, "Error executing \"INSERT TOKEN\" statement: %s\n", mysql_stmt_error(stmt));
-        return NULL;
+    args[2].is_null = 0;
+    if(mysql_stmt_bind_param(stmt, args) != 0) {
+        fprintf(stderr, "Error binding params in \"INSERT TOKEN\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return false;
     }
+
+    if(mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Error executing \"INSERT TOKEN\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return false;
+    }
+
     mysql_stmt_close(stmt);
+    return true;
 }
 
-char* mariadb_login(db_driver_t* db, char* key, char* password) {
+bool mariadb_check_token(db_driver_t* db, client_t* client, char* token) {
+    uv_mutex_lock(&db->lock);
+
+    char hashed_token[SHA256_DIGEST_LENGTH];
+    hash_sha256(token, strlen(token)+1, (unsigned char*)hashed_token);
+
+    char* query = "SELECT expiration_date from tokens where hashed_token = ? and client_id = ?";
+    MYSQL_STMT* stmt = mysql_stmt_init((MYSQL*)db->conn);
+    if (mysql_stmt_prepare(stmt, query, strlen(query)+1) != 0) {
+        fprintf(stderr, "Error preparing \"CHECK TOKEN\"statement: %s\n", mysql_stmt_error(stmt));
+        return false;
+    }
+
+    MYSQL_BIND args[2];
+    memset(args, 0, sizeof(args));
+    args[0].buffer_type = MYSQL_TYPE_STRING;
+    args[0].buffer = &client->id;
+    args[0].is_unsigned = 1;
+
+    args[1].buffer_type = MYSQL_TYPE_LONGLONG;
+    args[1].buffer = token;
+    args[1].buffer_length = strlen(token)+1;
+
+    if(mysql_stmt_bind_param(stmt, args) != 0) {
+        fprintf(stderr, "Error binding params in \"CHECK TOKEN\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    if(mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Error executing \"CHECK TOKEN\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    MYSQL_BIND result;
+    MYSQL_TIME* time;
+
+    result.buffer_type = MYSQL_TYPE_DATETIME;
+    result.buffer = time;
+    result.is_null = 0;
+
+    if(mysql_stmt_num_rows(stmt) != 0) {
+        
+        if(mysql_stmt_bind_result(stmt, &result) != 0) {
+            fprintf(stderr, "Result binding failed: %s\n", mysql_stmt_error(stmt));
+            mysql_stmt_close(stmt);
+            uv_mutex_unlock(&db->lock);
+            return false;
+        }
+
+        printf("Client provided good token.");
+    } else {
+        printf("Client provided wrong token!");
+    }
+
+    struct tm token_expiration_date;
+    mysql_to_tm(time, &token_expiration_date);
+
+    int8_t compare_result = compare_tm(&token_expiration_date, get_current_tm());
+
+    if(compare_result == TM_SMALLER) {
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    mysql_stmt_close(stmt);
+    uv_mutex_unlock(&db->lock);
+    return true;
+}
+
+char* mariadb_login(db_driver_t* db, client_t client, char* key, char* password) {
     //printf("\"%s\"\n", key);
     //printf("\"%s\"\n", password);
     uv_mutex_lock(&db->lock);
@@ -157,8 +283,8 @@ char* mariadb_login(db_driver_t* db, char* key, char* password) {
         }
 
         hash_sha256(rand_string(TOKEN_SIZE), TOKEN_SIZE, (unsigned char*)token);
-        if(mariadb_insert_token(client_id, token, db)) {
-            fprintf(stderr, "Inserting token failed: %s\n", mysql_stmt_error(stmt));
+        if(!mariadb_insert_token(db, client_id, token)) {
+            fprintf(stderr, "Inserting token failed");
             mysql_stmt_close(stmt);
             uv_mutex_unlock(&db->lock);
             return NULL;
@@ -169,6 +295,11 @@ char* mariadb_login(db_driver_t* db, char* key, char* password) {
     } else {
         printf("User provided wrong credentials!");
     }
+
+
+    // Init client fields after login
+    // like ID
+    client.id = client_id;
 
     mysql_stmt_close(stmt);
     uv_mutex_unlock(&db->lock);

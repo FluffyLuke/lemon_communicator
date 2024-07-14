@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <uv.h>
 #include "../includes/client.h"
 #include "../../libs/api/includes/parser.hpp"
@@ -49,13 +50,14 @@ void login_user(server_ctx* ctx, client_t* client, message_t* client_mes) {
     message_t res;
 
     // db.login will init the message
-    char* result = db->login(db, client_mes->data.login.key, client_mes->data.login.password);
+    char* result = db->login(db, client, client_mes->data.login.key, client_mes->data.login.password);
 
     if(result != NULL) {
         init_message(&res, LOGIN_RETURN, OK, NULL);
         res.data.login_r.token = result;
     } else {
         init_message(&res, LOGIN_RETURN, ERR, "Cannot login client");
+        res.data.login_r.token = NULL;
     }
     send(client, &res);
     destroy_message(&res);

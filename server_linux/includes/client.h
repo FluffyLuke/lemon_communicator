@@ -6,6 +6,7 @@
 #include <string.h>
 #include <uv.h>
 #include <uv/unix.h>
+#include <stdbool.h>
 #include "../../libs/vec/src/vec.h"
 
 
@@ -18,13 +19,16 @@ typedef struct {
     int64_t id;
     uv_mutex_t lock;
 
+    // If user is not logged, certain field are uninitialized, for e.g. ID.
+    bool logged;
+
     struct sockaddr_in addr;
     uv_stream_t* stream;
 
     char name[NAME_LEN];
     char password[PASSWORD_LEN];
     char email[EMAIL_LEN];
-    char* session_token;
+    //char* session_token;
 } client_t;
 
 #define CLIENT_SIZE (sizeof(client_t))
