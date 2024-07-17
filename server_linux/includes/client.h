@@ -16,7 +16,7 @@
 #define EMAIL_LEN 256*4
 
 typedef struct {
-    int64_t id;
+    uint64_t id;
     uv_mutex_t lock;
 
     // If user is not logged, certain field are uninitialized, for e.g. ID.

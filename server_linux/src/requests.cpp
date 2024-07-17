@@ -26,6 +26,7 @@ void basic_res(server_ctx* ctx, client_t* client, message_status status, const c
 
 void ping_back(server_ctx* ctx, client_t* client, message_t* client_mes) {
     message_t res;
+
     init_message(&res, RESPONSE, client_mes->status, client_mes->err);
     send(client, &res);
     destroy_message(&res);
@@ -50,15 +51,21 @@ void login_user(server_ctx* ctx, client_t* client, message_t* client_mes) {
     message_t res;
 
     // db.login will init the message
-    char* result = db->login(db, client, client_mes->data.login.key, client_mes->data.login.password);
+    token_t* token = db->login(db, client, client_mes->data.login.key, client_mes->data.login.password);
+    char* sliced_token;
+    strncpy(sliced_token, token->data, token->length);
 
-    if(result != NULL) {
+
+    if(token != NULL) {
         init_message(&res, LOGIN_RETURN, OK, NULL);
-        res.data.login_r.token = result;
+        res.data.login_r.token = sliced_token;
     } else {
         init_message(&res, LOGIN_RETURN, ERR, "Cannot login client");
         res.data.login_r.token = NULL;
     }
+    
     send(client, &res);
+    free(token);
+    free(sliced_token);
     destroy_message(&res);
 }
