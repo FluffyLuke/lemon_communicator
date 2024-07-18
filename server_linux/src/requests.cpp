@@ -52,9 +52,9 @@ void login_user(server_ctx* ctx, client_t* client, message_t* client_mes) {
 
     // db.login will init the message
     token_t* token = db->login(db, client, client_mes->data.login.key, client_mes->data.login.password);
-    char* sliced_token;
+    char* sliced_token = (char*)malloc(TOKEN_BUFFER_SIZE);
+    memset(sliced_token, 0, TOKEN_BUFFER_SIZE);
     strncpy(sliced_token, token->data, token->length);
-
 
     if(token != NULL) {
         init_message(&res, LOGIN_RETURN, OK, NULL);
@@ -66,6 +66,5 @@ void login_user(server_ctx* ctx, client_t* client, message_t* client_mes) {
     
     send(client, &res);
     free(token);
-    free(sliced_token);
     destroy_message(&res);
 }

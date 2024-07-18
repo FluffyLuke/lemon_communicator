@@ -73,12 +73,12 @@ bool hash_sha256(void* input, size_t length, unsigned char* buf) {
 }
 
 void generate_new_token(token_t* token) {
-    char* new_token = rand_string(TOKEN_SIZE);
+    char* new_token = rand_string(UNSHASHED_TOKEN_SIZE);
 
-    memcpy(token->data, new_token, TOKEN_SIZE);
+    memcpy(token->data, new_token, UNSHASHED_TOKEN_SIZE);
     token->is_hashed = false;
     token->is_null = false;
-    token->length = TOKEN_SIZE;
+    token->length = UNSHASHED_TOKEN_SIZE;
 
     free(new_token);
 }
@@ -123,7 +123,7 @@ bool mariadb_insert_token(db_driver_t* db, uint64_t client_id, token_t* token) {
 
     args[1].buffer_type = MYSQL_TYPE_STRING;
     args[1].buffer = token->data;
-    args[1].buffer_length = MAX_BUFFER_LEN;
+    args[1].buffer_length = TOKEN_BUFFER_SIZE;
     args[1].length = &token->length;
 
     //args[2].buffer_type = MYSQL_TYPE_DATETIME;
@@ -194,7 +194,7 @@ bool mariadb_check_token(db_driver_t* db, client_t* client, token_t* token_to_ch
 
     int64_t i = 0;
     result.buffer_type = MYSQL_TYPE_STRING;
-    result.buffer_length = MAX_BUFFER_LEN;
+    result.buffer_length = TOKEN_BUFFER_SIZE;
     result.buffer = returned_token.data;
     result.length = &returned_token.length;
     result.is_null = (char*)&returned_token.is_null;

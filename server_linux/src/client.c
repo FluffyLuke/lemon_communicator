@@ -19,7 +19,9 @@ void init_client(client_t* client, uv_tcp_t* stream) {
     //next_id++;
 
     for(int32_t i = 0; i < NAME_LEN; i++)
-        client->name[i] = 0;
+        client->first_name[i] = 0;
+    for(int32_t i = 0; i < NAME_LEN; i++)
+        client->last_name[i] = 0;
     for(int32_t i = 0; i < PASSWORD_LEN; i++)
         client->password[i] = 0;
     for(int32_t i = 0; i < EMAIL_LEN; i++)

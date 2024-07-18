@@ -258,7 +258,7 @@ void on_new_connection(uv_stream_t *server, int status) {
 
 int main(int argc, char** argv) {
 
-    //srand(time(NULL));
+    srand(time(NULL));
 
     // Main loop / server configuration
     server_ctx ctx;

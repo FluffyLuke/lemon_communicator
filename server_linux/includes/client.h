@@ -8,12 +8,7 @@
 #include <uv/unix.h>
 #include <stdbool.h>
 #include "../../libs/vec/src/vec.h"
-
-
-// Since utf-8, need to multiply by 4
-#define PASSWORD_LEN 50*4
-#define NAME_LEN 50*4
-#define EMAIL_LEN 256*4
+#include "../../libs/api/includes/parser.hpp"
 
 typedef struct {
     uint64_t id;
@@ -25,7 +20,8 @@ typedef struct {
     struct sockaddr_in addr;
     uv_stream_t* stream;
 
-    char name[NAME_LEN];
+    char first_name[FIRST_NAME_LEN];
+    char last_name[LAST_NAME_LEN];
     char password[PASSWORD_LEN];
     char email[EMAIL_LEN];
     //char* session_token;

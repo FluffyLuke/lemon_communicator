@@ -12,11 +12,8 @@ typedef enum {
     MARIADB,
 } database_type;
 
-#define MAX_BUFFER_LEN 4096
-#define TOKEN_SIZE 32
-
 typedef struct {
-    char data[MAX_BUFFER_LEN];
+    char data[TOKEN_BUFFER_SIZE];
     uint64_t length;
     int8_t is_null;
     int8_t is_hashed;
