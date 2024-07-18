@@ -36,3 +36,45 @@
     <key></key>
     <password></password>
 </root>
+
+<!-- LOGIN RETURN -->
+<root>
+    <type><type>
+    <status></status>
+    <error></error>
+    
+    <!-- To -->
+    <token><token>
+</root>
+
+
+<!-- ====== FOR LOGGED USERS ONLY ===== -->
+
+
+<!-- NETWORK STATE -->
+<root>
+    <type><type>
+    <status></status>
+    <error></error>
+
+    <token><token>
+</root>
+
+<!-- NETWORK STATE RETURN -->
+<root>
+    <type><type>
+    <status></status>
+    <error></error>
+
+    <!-- List of clients -->
+    <clients>
+        <client>
+            <first_name></first_name> 
+            <last_name></last_name>
+            <email></email>
+            <ipv4></ipv4>
+            <port></port>
+        <client>
+        <!-- (...) -->
+    </clients>
+</root>

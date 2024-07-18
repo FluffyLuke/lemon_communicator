@@ -21,7 +21,7 @@ create table credentials(
 
 create table tokens(
     id BIGINT unsigned NOT NULL AUTO_INCREMENT,
-    user_id BIGINT unsigned NOT NULL,
+    client_id BIGINT unsigned NOT NULL,
     hashed_token BINARY(255) NOT NULL,
     expiration_date DATETIME NOT NULL,
 
