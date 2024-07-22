@@ -83,12 +83,14 @@ void generate_new_token(token_t* token) {
     free(new_token);
 }
 
-void hash_token_sha256(token_t* token) {
-    hash_sha256(token->data, token->length, (unsigned char*) token->data);
+void init_token(token_t* token, char* token_raw, size_t len) {
+    memcpy(token->data, token_raw, len);
+    token->is_null = false;
+    token->length = len;
 }
 
-client_t* mariadb_get_all_clients(db_driver_t* db) {
-    // TODO end this later;
+void hash_token_sha256(token_t* token) {
+    hash_sha256(token->data, token->length, (unsigned char*) token->data);
 }
 
 // Remember: database lock must be acquired by the calling function
@@ -148,6 +150,7 @@ bool mariadb_insert_token(db_driver_t* db, uint64_t client_id, token_t* token) {
 bool mariadb_check_token(db_driver_t* db, client_t* client, token_t* token_to_check) {
     uv_mutex_lock(&db->lock);
 
+    printf("Token given by user: %-*s\n", (int)token_to_check->length, token_to_check->data);
     if(!token_to_check->is_hashed)
         hash_token_sha256(token_to_check);
 
@@ -207,11 +210,17 @@ bool mariadb_check_token(db_driver_t* db, client_t* client, token_t* token_to_ch
     }
     
     bool flag1 = false;
+    bool flag2 = true;
     int32_t fetch_result = mysql_stmt_fetch(stmt);
     while (fetch_result == 0 || fetch_result == MYSQL_DATA_TRUNCATED) {
-        bool flag2 = true;
+        printf("Token given by user after hashing: %-*s\n", (int)token_to_check->length, token_to_check->data);
+        printf("Token to compare: %-*s\n", (int)returned_token.length, returned_token.data);
+        flag2 = true;
         for(int8_t i = 0; i < returned_token.length; i++) {
+            printf("[%d] - [%d]\n", token_to_check->data[i], returned_token.data[i]);
             if(returned_token.data[i] != token_to_check->data[i]) {
+                printf("CEHCK %d\n", returned_token.data[i] != token_to_check->data[i]);
+                printf("Bytes check failed!\n");
                 flag2 = false;
                 break;
             }
@@ -228,6 +237,99 @@ bool mariadb_check_token(db_driver_t* db, client_t* client, token_t* token_to_ch
     mysql_stmt_close(stmt);
     uv_mutex_unlock(&db->lock);
     return flag1;
+}
+
+int8_t mariadb_init_client_data(db_driver_t* db, client_t* client) {
+    uv_mutex_lock(&db->lock);
+    if(!client->logged) {
+        fprintf(stderr, "Client is not logged, yet trying to access client data!\n");
+        return false;
+    }
+
+    char* query = "SELECT first_name, last_name, email FROM clients where `id` = ?";
+    MYSQL_STMT* stmt = mysql_stmt_init((MYSQL*)db->conn);
+    if (mysql_stmt_prepare(stmt, query, strlen(query)+1) != 0) {
+        fprintf(stderr, "Error preparing \"INIT CLIENT DATA\" statement: %s\n", mysql_stmt_error(stmt));
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+    
+
+    MYSQL_BIND args[1];
+    memset(args, 0, sizeof(args));
+    args[0].buffer_type = MYSQL_TYPE_LONGLONG;
+    args[0].buffer = &client->id;
+    args[0].is_unsigned = true;
+
+    if (mysql_stmt_bind_param(stmt, args) != 0) {
+        fprintf(stderr, "Error binding params to \"INIT CLIENT DATA\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+    if (mysql_stmt_execute(stmt) != 0) {
+        fprintf(stderr, "Error executing \"INIT CLIENT DATA\" statement: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+    if (mysql_stmt_store_result(stmt) != 0) {
+        fprintf(stderr, "Error storing result set of \"INIT CLIENT DATA\": %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    MYSQL_BIND result[3];
+    memset(&result, 0, sizeof(result));
+    char first_name[FIRST_NAME_LEN] = {0};
+    char last_name[LAST_NAME_LEN] = {0};
+    char email[EMAIL_LEN] = {0};
+
+    result[0].buffer_type = MYSQL_TYPE_STRING;
+    result[0].buffer = first_name;
+    result[0].buffer_length = FIRST_NAME_LEN;
+    result[0].is_null = 0;
+
+    result[1].buffer_type = MYSQL_TYPE_STRING;
+    result[1].buffer = last_name;
+    result[1].buffer_length = LAST_NAME_LEN;
+    result[1].is_null = 0;
+
+    result[2].buffer_type = MYSQL_TYPE_STRING;
+    result[2].buffer = email;
+    result[2].buffer_length = EMAIL_LEN;
+    result[2].is_null = 0;
+
+    if(mysql_stmt_bind_result(stmt, result) != 0) {
+        fprintf(stderr, "Result binding for \"INIT CLIENT DATA\" failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    int32_t fetch_result = mysql_stmt_fetch(stmt);
+    if(!(fetch_result == 0 || fetch_result == MYSQL_DATA_TRUNCATED)) {
+        fprintf(stderr, "Data fetching for \"INIT CLIENT DATA\" failed: %s\n", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    if(mysql_stmt_num_rows(stmt) == 0) {
+        fprintf(stderr, "Data fetching for \"INIT CLIENT DATA\" failed: no data about client\n");
+        mysql_stmt_close(stmt);
+        uv_mutex_unlock(&db->lock);
+        return false;
+    }
+
+    memcpy(client->first_name, first_name, FIRST_NAME_LEN);
+    memcpy(client->last_name, last_name, LAST_NAME_LEN);
+    memcpy(client->email, email, EMAIL_LEN);
+
+    uv_mutex_unlock(&db->lock);
+    
+    return true;
 }
 
 token_t* mariadb_login(db_driver_t* db, client_t* client, char* key, char* password) {
@@ -273,7 +375,7 @@ token_t* mariadb_login(db_driver_t* db, client_t* client, char* key, char* passw
     
     MYSQL_BIND result;
     memset(&result, 0, sizeof(result));
-    uint64_t client_id = 250;
+    uint64_t client_id = 0;
 
     result.buffer_type = MYSQL_TYPE_LONG;
     result.buffer = &client_id;
@@ -305,7 +407,7 @@ token_t* mariadb_login(db_driver_t* db, client_t* client, char* key, char* passw
             return NULL;
         }
 
-        printf("User logged, returning him new token\n");
+        //printf("User logged, returning him new token\n");
 
     } else {
         printf("User provided wrong credentials!\n");
@@ -363,9 +465,9 @@ int32_t init_database(db_driver_ctx db_ctx, db_driver_t* db) {
                 return -1;
             }
             db->conn = conn;
-            db->get_all_clients = mariadb_get_all_clients;
             db->login = mariadb_login;
             db->check_token = mariadb_check_token;
+            db->init_client_data = mariadb_init_client_data;
             return 0;
             break;
         }

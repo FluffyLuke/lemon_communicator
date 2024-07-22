@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <string.h>
 #include <stdio.h>
@@ -7,6 +9,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <uv.h>
 #include "../includes/server.h"
 #include "../includes/requests.hpp"
 
@@ -131,9 +134,18 @@ int32_t init_server(server_ctx* server_ctx, int32_t argc, char** argv) {
     if(init_database(db_ctx, server_ctx->database) != 0) 
         return -1;
     
-    init_client_list(&server_ctx->client_list);
+    server_ctx->client_list = (client_list_t*)malloc(sizeof(client_list_t));
+    init_client_list(server_ctx->client_list);
 
     return 0;
+}
+
+void destroy_ctx(server_ctx* ctx) {
+    destroy_database(ctx->database);
+    destroy_client_list(ctx->client_list);
+    free(ctx->database);
+    free(ctx->client_list);
+    //nothing to see here
 }
 
 char* get_client_ip(uv_tcp_t* client) {
@@ -145,15 +157,9 @@ char* get_client_ip(uv_tcp_t* client) {
     return ip_str;
 }
 
-void destroy_ctx(server_ctx* ctx) {
-    destroy_database(ctx->database);
-    destroy_client_list(&ctx->client_list);
-    free(ctx->database);
-    //nothing to see here
-}
-
 void alloc_data(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     buf->base = (char*)malloc(suggested_size);
+    memset(buf->base, 0, suggested_size);
     buf->len = suggested_size;
 }
 
@@ -165,10 +171,12 @@ typedef struct {
 void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf) {
     
     client_conn_t* cc = (client_conn_t *)client_stream->data;
-    client_list_t* cl = &cc->ctx->client_list;
+    client_list_t* cl = cc->ctx->client_list;
 
     client_t* client = cc->client;
     uv_mutex_lock(&client->lock);
+
+    bool disconected = false;
 
     if (nread > 0) {
         message_t* m = (message_t*)malloc(sizeof(message_t));
@@ -178,6 +186,7 @@ void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf
         printf("Got new message\n");
         printf("Whole message: \n%s\n", buf->base);
         printf("Message type: %d\n", m->type);
+        printf("Is client logged?: %d\n", client->logged);
 #endif
         switch(m->type) {
             case RESPONSE:
@@ -186,10 +195,12 @@ void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf
                 ping_back(cc->ctx, client, m);
                 break;
             case LOGIN:
-#ifdef  __EXTRA_INFO
                 printf("Logging user...\n");
-#endif
                 login_user(cc->ctx, client, m);
+                break;
+            case NETWORK_STATE:
+                printf("Giving info about the network...\n");
+                get_network_state(cc->ctx, client, m);
                 break;
             default:
                 // Inform client about wrong request
@@ -203,16 +214,20 @@ void serve_client(uv_stream_t* client_stream, ssize_t nread, const uv_buf_t* buf
     } else {
         // EOF file reached - closing connection
         printf("Client disconected\n");
-        uv_rwlock_wrlock(&cl->lock);
-        int32_t index;
-        vec_remove(&cl->vec, client);
-        uv_rwlock_rdunlock(&cl->lock);
+        uv_rwlock_wrlock(cl->lock);
+        vec_remove(cl->vec, client);
+        uv_rwlock_rdunlock(cl->lock);
+
+        disconected = true;
     }
 
     // TODO lock still can be obtained while destroying client here - need fix
     uv_mutex_unlock(&client->lock);
-    destroy_client(client);
-    free(client);
+    if(disconected) {
+        destroy_client(client);
+        free(client);
+    }
+
     free(buf->base);
 }
 
@@ -247,6 +262,11 @@ void on_new_connection(uv_stream_t *server, int status) {
         cc->ctx = ctx;
         // Add cc to handle
         client_stream->data = cc;
+
+        uv_rwlock_wrlock(ctx->client_list->lock);
+        vec_push(ctx->client_list->vec, client);
+        uv_rwlock_wrunlock(ctx->client_list->lock);
+
         uv_read_start((uv_stream_t*) client_stream, alloc_data, serve_client);
     } else {
         fprintf(stderr, "Could not accept an incoming connection...\n");

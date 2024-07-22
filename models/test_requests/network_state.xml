@@ -1,0 +1,12 @@
+<root>
+    <type>network_state</type>
+    <status>ok</status>
+    <error></error>
+
+    <token>v6NIV?m!FqiyRFwyLe.M1o2ik'9QOa1</token>
+</root>
+
+<!-- All in one line -->
+<!--
+<root> <type>network_state</type> <status>ok</status> <error></error> <token>s-!g0ww#ceAdOlsp1fIVemh9NI1Xd#'9</token> </root>
+-->

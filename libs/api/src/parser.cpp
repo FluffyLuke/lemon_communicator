@@ -44,10 +44,12 @@ void destroy_message(message_t* m) {
         case LOGIN_RETURN: {
             if(m->data.login_r.token != NULL) 
                 free(m->data.login_r.token);
+            break;
         }
         case NETWORK_STATE:
             if(m->data.network.token != NULL) 
                 free(m->data.login_r.token);
+            break;
         case NETWORK_STATE_RETURN:
             vec_deinit(&m->data.network_r.clients);
         default: {
@@ -105,7 +107,7 @@ char* serialize_message(message_t* m) {
             client_body_t cb;
             int32_t i;
             vec_foreach(&m->data.network_r.clients, cb, i) {
-
+                printf("TESTING: %d\n", i);
                 char ip[INET_ADDRSTRLEN];
                 uint16_t port;
 

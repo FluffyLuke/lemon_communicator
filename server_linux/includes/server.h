@@ -13,7 +13,7 @@ typedef struct {
     uint16_t port;
     uv_loop_t* loop;
     
-    client_list_t client_list;
+    client_list_t* client_list;
     db_driver_t* database;
 } server_ctx;
 

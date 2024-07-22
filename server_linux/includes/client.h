@@ -41,11 +41,12 @@ void destroy_client(client_t* client);
 typedef vec_t(client_t*) client_vec_t;
 
 typedef struct {
-    uv_rwlock_t lock;
-    client_vec_t vec;
+    uv_rwlock_t* lock;
+    client_vec_t* vec;
 } client_list_t;
 
 void init_client_list(client_list_t* list);
 void destroy_client_list(client_list_t* list);
+void client_to_client_body(client_t* client, client_body_t* client_body);
 
 #endif

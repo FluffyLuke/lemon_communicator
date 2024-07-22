@@ -1,3 +1,4 @@
+<?xml version="1.0"?>
 <root>
     <type>login</type>
     <status>ok</status>
@@ -6,3 +7,8 @@
     <key>SecretKey</key>
     <password>Piernik</password>
 </root>
+
+<!-- All in one line -->
+<!-- 
+<?xml version="1.0"?> <root> <type>login</type> <status>ok</status> <error></error> <key>SecretKey</key> <password>Piernik</password> </root>
+-->
