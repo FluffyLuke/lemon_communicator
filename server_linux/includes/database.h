@@ -1,7 +1,7 @@
 #ifndef __DATABASE
 #define __DATABASE
 
-#include "../includes/client.h"
+#include "../../libs/api/includes/client.h"
 #include "../../libs/api/includes/parser.hpp"
 #include <stdbool.h>
 #include <uv/unix.h>
