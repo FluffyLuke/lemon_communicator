@@ -6,7 +6,7 @@
 #include <uv/unix.h>
 #include "../../libs/api/includes/parser.hpp"
 #include "../../libs/sqlite/sqlite3.h"
-#include "../includes/database.h"
+#include "../../libs/api/includes/database.h"
 #include "../../libs/vec/src/vec.h"
 
 typedef struct {

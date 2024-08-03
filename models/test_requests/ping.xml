@@ -4,3 +4,5 @@
     <status>ok</status>
     <error>Random error, even if status is okay</error>
 </root>
+
+<?xml version="1.0"?> <root> <type>response</type> <status>ok</status> <error>Random error, even if status is okay</error> </root>

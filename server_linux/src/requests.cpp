@@ -3,7 +3,7 @@
 #include "../../libs/api/includes/client.h"
 #include "../../libs/api/includes/parser.hpp"
 #include "../includes/server.h"
-#include "../includes/database.h"
+#include "../../libs/api/includes/database.h"
 #include "../includes/requests.hpp"
 #include "../../libs/openssl/include/crypto/sha.h"
 

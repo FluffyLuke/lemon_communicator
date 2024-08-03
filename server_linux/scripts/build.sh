@@ -8,8 +8,8 @@ mkdir -p ${PATHTOTARGET}
 files=()
 files+=("$PATHTOFILES/requests.cpp")
 files+=("$PATHTOFILES/main.cpp")
-files+=("$PATHTOFILES/database.c")
 
+files+=("$PATHTOLIBS/api/src/database.c")
 files+=("$PATHTOLIBS/api/src/client.c")
 files+=("$PATHTOLIBS/api/src/parser.cpp")
 files+=("$PATHTOLIBS/vec/src/vec.c")
