@@ -17,19 +17,23 @@
 
 EXE = target/lemon_comm
 IMGUI_DIR = ../libs/imgui
+VEC_DIR = ../libs/vec/src
+API_DIR = /home/furras/Workspace/lemon_communicator/libs/api/src
 SOURCES_DIR = src
 TARGET_DIR = target
 SOURCES = $(SOURCES_DIR)/main.cpp
-SOURCES += $(SOURCES_DIR)/utils.c $(SOURCES_DIR)/lemon_ctx.c $(SOURCES_DIR)/lemon_gui.cpp
+SOURCES += $(SOURCES_DIR)/utils.c $(SOURCES_DIR)/lemon_ctx.c $(SOURCES_DIR)/lemon_gui.cpp $(SOURCES_DIR)/server_tcp.c #$(VEC_DIR)/vec.c
+SOURCES += $(API_DIR)/database.c $(API_DIR)/client.c $(API_DIR)/parser.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui_impl_opengl3.cpp
+
 OBJS = $(addprefix $(TARGET_DIR)/obj/, $(addsuffix .o, $(basename $(notdir $(SOURCES)))))
 UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
 CXXFLAGS = -std=c++11 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends
 CXXFLAGS += -g -Wall -Wformat
-LIBS = `pkg-config --libs libuv libstrophe`
+LIBS = `pkg-config --libs libuv`
 
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
@@ -61,6 +65,15 @@ $(TARGET_DIR)/obj/%.o:$(IMGUI_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(TARGET_DIR)/obj/%.o:$(IMGUI_DIR)/backends/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/obj/%.o:$(VEC_DIR)/vec.c
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/obj/%.o:$(API_DIR)/%.c
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(TARGET_DIR)/obj/%.o:$(API_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 all: $(EXE)

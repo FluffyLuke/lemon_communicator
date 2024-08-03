@@ -1,21 +1,10 @@
 SCRIPT=$(realpath -s "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
-PATHTOFILES="$SCRIPTPATH/src"
-PATHTOIMGUI="$SCRIPTPATH/imgui"
-PATHTOTARGET="$SCRIPTPATH/target"
-
+PATHTOFILES="$SCRIPTPATH/../src"
+PATHTOTARGET="$SCRIPTPATH/../target"
+PATHTOLIBS="$SCRIPTPATH/../../libs"
+PATHTOOBJS="$SCRIPTPATH/../target/obj"
 mkdir -p ${PATHTOTARGET}
+mkdir -p ${PATHTOOBJS}
 
-files=()
-files+=("$PATHTOFILES/main.cpp")
-#files+=("$PATHTOFILES/utils.c")
-files+=("$PATHTOIMGUI/imgui.cpp")
-files+=("$PATHTOIMGUI/imgui_demo.cpp")
-files+=("$PATHTOIMGUI/imgui_draw.cpp")
-files+=("$PATHTOIMGUI/imgui_tables.cpp")
-files+=("$PATHTOIMGUI/imgui_widgets.cpp")
-files+=("$PATHTOIMGUI/backends/imgui_impl_glfw.cpp")
-files+=("$PATHTOIMGUI/backends/imgui_impl_opengl3.cpp")
-
-
-g++ ${files[@]} -o ${PATHTOTARGET}/linux_client -g -Wall -Wformat -lGL `pkg-config --libs libuv libstrophe glfw3 imgui`
+$(cd $SCRIPTPATH/../ && make)

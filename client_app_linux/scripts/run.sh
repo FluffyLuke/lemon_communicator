@@ -3,5 +3,8 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 PATHTOFILES="$SCRIPTPATH/../src/"
 PATHTOTARGET="$SCRIPTPATH/../target"
 
-${SCRIPTPATH}/build.sh
-${PATHTOTARGET}/linux_client
+if ${SCRIPTPATH}/build.sh ; then
+    ${PATHTOTARGET}/lemon_comm $@
+else
+    echo "Cannot run program!"
+fi

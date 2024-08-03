@@ -9,9 +9,10 @@
 
 #include <uv.h>
 
-#include "includes/utils.h"
-#include "includes/lemon_ctx.h"
-#include "includes/lemon_gui.h"
+#include "../includes/utils.h"
+#include "../includes/lemon_ctx.h"
+#include "../includes/lemon_gui.h"
+#include "../includes/server_tcp.h"
 
 #include "../../libs/imgui/imgui.h"
 #include "../../libs/imgui/backends/imgui_impl_glfw.h"
@@ -61,23 +62,32 @@ i32 main(int argc, char** argv) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    lemon_app_ctx* lemon_app_ctx = init_app_ctx(argc, argv, window);
 
-    uv_loop_t* gui_loop = uv_default_loop();
+    lemon_ctx ctx;
+    init_lemon_ctx(argc, argv, &ctx, window);
+    uv_loop_t* loop = uv_default_loop();
+    ctx.loop = loop;
+
     uv_idle_t gui_handle;
-    uv_idle_init(gui_loop, &gui_handle);
-    gui_handle.data = lemon_app_ctx;
+    uv_idle_init(loop, &gui_handle);
+    gui_handle.data = &ctx;
     uv_idle_start(&gui_handle, ui_main);
 
-    uv_run(gui_loop, UV_RUN_DEFAULT);
-    uv_loop_close(gui_loop);
+    uv_tcp_t server_handle;
+    uv_tcp_init(loop, &server_handle);
+    server_handle.data = &ctx;
 
-    fprintf(stdout, "OKNO się zamknęło\n");
+    uv_work_t tcp_req;
+    tcp_req.data = &ctx;
+    uv_queue_work(loop, &tcp_req, tcp_loop, NULL);
+    uv_run(loop, UV_RUN_DEFAULT);
+    
+    uv_loop_close(loop);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    free_app_context(lemon_app_ctx);
+    destroy_lemon_ctx(&ctx);
     glfwTerminate();
 
     return 0;
