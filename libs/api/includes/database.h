@@ -6,7 +6,8 @@
 #include <stdbool.h>
 #include <uv/unix.h>
 #include <stdint.h>
-#include "../../mariadb-connector-c/include/mysql.h"
+// #include "../../mariadb-connector-c/include/mysql.h"
+#include "../../../client_app_linux/libs/maria-db-connector-c/include/mysql.h"
 
 typedef enum {
     MARIADB,

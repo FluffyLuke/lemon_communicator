@@ -1,3 +1,7 @@
-[submodule "client_app_linux/libs/maria-db-connector-c"]
-	path = client_app_linux/libs/maria-db-connector-c
+[submodule "libs/maria-connector-c"]
+	path = libs/maria-db-connector-c
 	url = https://github.com/mariadb-corporation/mariadb-connector-c.git
+
+[submodule "libs/pugixml"]
+	path = libs/pugixml
+	url = https://github.com/zeux/pugixml.git

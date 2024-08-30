@@ -13,7 +13,9 @@
 
 #include <uv.h>
 #include "../includes/utils.h"
+extern "C" {
 #include "../includes/lemon_ctx.h"
+}
 #include "../includes/lemon_gui.h"
 #include "../includes/server_tcp.h"
 

@@ -4,14 +4,18 @@
 #include <cstdlib>
 #include <netinet/in.h>
 #include <stdint.h>
-#include <pugixml.hpp>
 #include <sstream>
 #include <string>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 
+extern "C" {
+#include "../../vec/src/vec.h"
+}
+
 #include "../includes/parser.hpp"
+#include "../pugixml/src/pugixml.hpp"
 
 #define IF_EQUALS(s1, s2) (strcmp(s1, s2) == 0)
 
@@ -29,7 +33,7 @@ void init_message(message_t* m, message_type type, message_status status, const 
     }
 }
 
-void destroy_message(message_t* m) {
+extern "C" void destroy_message(message_t* m) {
     if(m->err != NULL) {
         free(m->err);
     }
@@ -58,7 +62,7 @@ void destroy_message(message_t* m) {
     }
 }
 
-char* serialize_message(message_t* m) {
+extern "C" char* serialize_message(message_t* m) {
     // if(m->type != RESPONSE) {
     //     return NULL;
     // }

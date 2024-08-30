@@ -21,6 +21,12 @@
 #define PASSWORD_LEN 50*4
 #define IPV4_LEN 15
 
+#ifdef __cplusplus
+#   define EXTERNC extern "C"
+#else
+#   define EXTERNC
+#endif
+
 // REMEMBER - when adding types here changes also need to be made in parser itself!!!
 // if there is "RETURN" in type's name, this means only a server can produce this message
 typedef enum {
@@ -106,10 +112,10 @@ typedef struct {
     } data;
 } message_t;
 
-void init_message(message_t* m, message_type, message_status status, const char* err);
-void destroy_message(message_t* m);
+EXTERNC void init_message(message_t* m, message_type, message_status status, const char* err);
+EXTERNC void destroy_message(message_t* m);
 
-char* serialize_message(message_t* m);
+EXTERNC char* serialize_message(message_t* m);
 void deserialize_message(message_t* message, const char* raw_xml);
 
 #endif
